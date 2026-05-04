@@ -312,6 +312,22 @@ export default function InvoicesPage() {
               </Button>
             )}
             <Button
+              icon={<Download size={14} />}
+              variant="outline"
+              onClick={() => {
+                invoicesApi.downloadTemplate().then((res) => {
+                  const url = URL.createObjectURL(new Blob([res.data]))
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = 'invoice-upload-template.xlsx'
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }).catch(() => toast.error('Failed to download template'))
+              }}
+            >
+              Template
+            </Button>
+            <Button
               icon={<Upload size={14} />}
               variant="outline"
               onClick={() => setShowUpload(true)}

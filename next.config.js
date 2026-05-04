@@ -4,10 +4,9 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'https://ways-erp.onrender.com'}/api/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_API_URL || 'NEXT_PUBLIC_API_URL='}/api/:path*`,
       },
     ]
   },
 }
-
 module.exports = nextConfig
