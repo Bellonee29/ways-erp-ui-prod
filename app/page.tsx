@@ -75,8 +75,8 @@ const STEPS = [
   {
     num: 1,
     title: 'Register your organisation',
-    desc: 'Create your account with company details and FIRS credentials. Takes under 5 minutes.',
-    action: { label: 'Register now', href: '/register' },
+    desc: 'Please contact the administrator at bellowajiuo@gmail.com or +2349039156872 to create your account with your company details and FIRS credentials. This process takes under five minutes.',
+    // action: { label: 'Register now', href: '/register' },
   },
   {
     num: 2,
@@ -158,13 +158,13 @@ export default function HomePage() {
           </nav>
           {/* CTA */}
           <div className="flex items-center gap-3">
-            <Link href="/login"
+            {/* <Link href="/login"
               className="text-[14px] font-semibold text-gray-600 hover:text-gray-900 px-4 py-2 transition-colors">
               Sign in
-            </Link>
-            <Link href="/register"
+            </Link> */}
+            <Link href="/login"
               className="text-[14px] font-bold text-white bg-green-600 hover:bg-green-700 px-5 py-2.5 rounded-[8px] transition-colors shadow-sm">
-              Get started free
+              Sign in
             </Link>
           </div>
         </div>
@@ -204,7 +204,7 @@ export default function HomePage() {
           </p>
 
           {/* Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-10">
+          {/* <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-10">
             <Link href="/register"
               className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold px-8 py-4 rounded-[10px] text-[16px] transition-all shadow-lg shadow-green-200">
               Start for free <ArrowRight size={18} />
@@ -216,7 +216,7 @@ export default function HomePage() {
           </div>
           <p className="text-center text-[13px] text-gray-400 mt-4">
             No credit card required · Setup in 5 minutes · Nigerian business ready
-          </p>
+          </p> */}
 
           {/* Dashboard screenshot mock */}
           <div className="mt-16 rounded-2xl overflow-hidden border border-gray-200 shadow-2xl" style={{ boxShadow: '0 32px 80px -12px rgba(0,0,0,0.12)' }}>
@@ -464,11 +464,11 @@ export default function HomePage() {
               ))}
             </div>
 
-            <Link href="/register"
+            <Link href="/login"
               className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold px-8 py-4 rounded-[10px] text-[16px] transition-all shadow-lg shadow-green-200 w-full justify-center">
-              Register your organisation <ArrowRight size={18} />
+              Sign in <ArrowRight size={18} />
             </Link>
-            <p className="text-[12px] text-gray-400 mt-3">Already registered? <Link href="/login" className="text-green-600 font-semibold hover:underline">Sign in →</Link></p>
+            {/* <p className="text-[12px] text-gray-400 mt-3">Already registered? <Link href="/login" className="text-green-600 font-semibold hover:underline">Sign in →</Link></p> */}
           </div>
         </div>
       </section>
@@ -487,14 +487,14 @@ export default function HomePage() {
                 Join hundreds of Nigerian businesses running on WaysERP. FIRS-certified, locally built, and designed for growth.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
-                <Link href="/register"
-                  className="inline-flex items-center gap-2 bg-white text-green-700 font-bold px-8 py-4 rounded-[10px] text-[15px] hover:shadow-2xl transition-all">
-                  Register your organisation <ArrowRight size={18} />
-                </Link>
                 <Link href="/login"
+                  className="inline-flex items-center gap-2 bg-white text-green-700 font-bold px-8 py-4 rounded-[10px] text-[15px] hover:shadow-2xl transition-all">
+                  Sign in <ArrowRight size={18} />
+                </Link>
+                {/* <Link href="/login"
                   className="inline-flex items-center gap-2 border-2 border-white/30 text-white font-semibold px-8 py-4 rounded-[10px] text-[15px] hover:bg-white/10 transition-all">
                   Sign in
-                </Link>
+                </Link> */}
               </div>
             </div>
           </div>
