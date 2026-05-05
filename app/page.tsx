@@ -379,12 +379,12 @@ export default function HomePage() {
                     <h3 className="text-[15px] font-bold text-gray-900">{title}</h3>
                     <p className="text-[13.5px] text-gray-500 mt-1 leading-relaxed">{desc}</p>
                   </div>
-                  {action && (
+                  {/* {action && (
                     <Link href={action.href}
                       className="self-center flex-shrink-0 inline-flex items-center gap-1.5 bg-green-600 text-white text-[13px] font-bold px-4 py-2 rounded-[8px] hover:bg-green-700 transition-colors">
                       {action.label} <ArrowRight size={14} />
                     </Link>
-                  )}
+                  )} */}
                 </div>
               ))}
             </div>
