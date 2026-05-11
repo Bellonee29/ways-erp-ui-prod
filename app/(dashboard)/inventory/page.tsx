@@ -553,14 +553,16 @@ export default function InventoryPage() {
                 {stockLoading ? <SkeletonRows cols={6} /> : stockList.length === 0 ? (
                   <EmptyState message="No stock records. Receive a purchase order to add stock." icon={<BarChart3 size={28} />} />
                 ) : stockList.map((s, i) => {
-                  const isLow = s.quantity <= s.reorderLevel
+                  const qty = Number(s.quantityOnHand ?? 0)
+                  const reorder = s.reorderPoint ?? 0
+                  const isLow = reorder > 0 && qty <= reorder
                   return (
                     <Tr key={i} className={isLow ? 'bg-red-50/40' : ''}>
                       <Td className="font-semibold">{s.productName}</Td>
-                      <Td><span className="font-mono text-[12px] text-gray-500">{s.sku ?? '—'}</span></Td>
+                      <Td><span className="font-mono text-[12px] text-gray-500">{s.productSku ?? '—'}</span></Td>
                       <Td>{s.warehouseName}</Td>
-                      <Td><span className={cn('text-[15px] font-extrabold', isLow ? 'text-red-600' : 'text-gray-900')}>{s.quantity}</span></Td>
-                      <Td className="text-gray-500">{s.reorderLevel}</Td>
+                      <Td><span className={cn('text-[15px] font-extrabold', isLow ? 'text-red-600' : 'text-gray-900')}>{qty.toFixed(2)}</span></Td>
+                      <Td className="text-gray-500">{reorder > 0 ? reorder : '—'}</Td>
                       <Td>
                         {isLow
                           ? <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full"><AlertTriangle size={10} /> Low Stock</span>
