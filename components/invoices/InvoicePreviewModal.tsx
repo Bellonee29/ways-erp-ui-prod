@@ -1,5 +1,4 @@
 'use client'
-
 import { Download, Zap, X, CheckCircle2 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Badge, { invoiceStatusBadge } from '@/components/ui/Badge'
