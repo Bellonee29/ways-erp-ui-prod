@@ -25,6 +25,23 @@ export default function InvoicePreviewModal({
   const isDraft = invoice.status === 'DRAFT'
   const cur = invoice.currency ?? 'NGN'
 
+  const invoiceTypeLabel = invoice.invoiceTypeCode === '380'
+    ? '380 · Commercial Invoice'
+    : invoice.invoiceTypeCode === '381'
+    ? '381 · Credit Note'
+    : invoice.invoiceTypeCode === '383'
+    ? '383 · Debit Note'
+    : invoice.invoiceTypeCode ?? null
+
+  function fmtDiscount(item: typeof invoice.items[0]): string {
+    const pct = item.discountPercentage ?? 0
+    const amt = item.discountAmount ?? 0
+    const resolved = item.resolvedDiscount ?? 0
+    if (pct > 0) return resolved > 0 ? `${pct}% (${formatCurrency(resolved, cur)})` : `${pct}%`
+    if (amt > 0) return formatCurrency(amt, cur)
+    return '—'
+  }
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
@@ -40,6 +57,9 @@ export default function InvoicePreviewModal({
               <div>
                 <p className="text-[11px] font-bold uppercase tracking-[.07em] text-gray-400">Invoice</p>
                 <p className="text-[17px] font-extrabold text-gray-900 leading-tight">{invoice.invoiceNumber}</p>
+                {invoiceTypeLabel && (
+                  <p className="text-[11px] text-gray-400 mt-0.5">{invoiceTypeLabel}</p>
+                )}
               </div>
               <Badge variant={invoiceStatusBadge(invoice.status)}>{invoice.status}</Badge>
               {fiscalized && (
@@ -120,9 +140,7 @@ export default function InvoicePreviewModal({
                         {item.taxRate != null ? `${item.taxRate}%` : '—'}
                       </td>
                       <td className="px-3 py-2.5 text-right text-gray-600">
-                        {item.discountAmount && item.discountAmount > 0
-                          ? formatCurrency(item.discountAmount, cur)
-                          : '—'}
+                        {fmtDiscount(item)}
                       </td>
                       <td className="px-3 py-2.5 text-right font-semibold text-gray-800">
                         {formatCurrency(item.totalAmount, cur)}

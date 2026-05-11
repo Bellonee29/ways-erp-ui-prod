@@ -21,7 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Invoices',   icon: FileText,         href: '/invoices' },
   { label: 'CRM',        icon: TrendingUp,        href: '/crm' },
   { label: 'Inventory',  icon: ShoppingCart,      href: '/inventory' },
-  { label: 'Accounting', icon: BookOpen,           href: '/accounting' },
+  { label: 'Accounting', icon: BookOpen,           href: '/accounting', roles: ['TENANT_ADMIN', 'DIVISION_ADMIN'] },
   { label: 'Reports',    icon: BarChart2,           href: '/reports' },
   { label: 'Users',      icon: Users,              href: '/users' },
   { label: 'Divisions',  icon: Building2,          href: '/divisions', roles: ['TENANT_ADMIN'] },

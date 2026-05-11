@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { inventoryApi } from '@/lib/api/inventory'
+import { accountingApi } from '@/lib/api/accounting'
 import { formatCurrency, formatDate, cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/api/client'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -48,6 +49,7 @@ const productSchema = z.object({
   trackInventory:           z.boolean().default(true),
   initialStock:             z.coerce.number().min(0).default(0).optional(),
   initialStockWarehouseId:  z.string().optional(),
+  expiryDate:               z.string().optional(),
 })
 type ProductForm = z.infer<typeof productSchema>
 
@@ -81,6 +83,7 @@ const poLineSchema = z.object({
   unitPrice:      z.coerce.number().min(0).default(0),
   taxRate:        z.coerce.number().min(0).default(7.5),
   discountAmount: z.coerce.number().min(0).default(0),
+  taxIncluded:    z.boolean().default(false),
 })
 const poSchema = z.object({
   vendorName:    z.string().min(1, 'Vendor name required'),
@@ -348,13 +351,21 @@ export default function InventoryPage() {
   })
 
   /* ── PO mutations ── */
-  const poForm = useForm<POForm>({ resolver: zodResolver(poSchema), defaultValues: { currency: 'NGN', orderDate: today, lines: [{ productId: '', quantity: 1, unitPrice: 0, taxRate: 7.5, discountAmount: 0 }] } })
+  const poForm = useForm<POForm>({ resolver: zodResolver(poSchema), defaultValues: { currency: 'NGN', orderDate: today, lines: [{ productId: '', quantity: 1, unitPrice: 0, taxRate: 7.5, discountAmount: 0, taxIncluded: false }] } })
   const { fields: poLines, append: appendPOLine, remove: removePOLine } = useFieldArray({ control: poForm.control, name: 'lines' })
 
-  const createPOMutation  = useMutation({ mutationFn: inventoryApi.createPurchaseOrder, onSuccess: () => { toast.success('Purchase order created'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); setShowNewPO(false); poForm.reset() }, onError: (e) => toast.error(getErrorMessage(e)) })
-  const confirmPOMutation = useMutation({ mutationFn: inventoryApi.confirmPurchaseOrder, onSuccess: () => { toast.success('PO confirmed — ready to receive goods'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }) }, onError: (e) => toast.error(getErrorMessage(e)) })
-  const receivePOMutation = useMutation({ mutationFn: inventoryApi.receivePurchaseOrder, onSuccess: () => { toast.success('Goods received — stock updated'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); qc.invalidateQueries({ queryKey: ['stock'] }) }, onError: (e) => toast.error(getErrorMessage(e)) })
-  const cancelPOMutation  = useMutation({ mutationFn: inventoryApi.cancelPurchaseOrder, onSuccess: () => { toast.success('PO cancelled'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }) }, onError: (e) => toast.error(getErrorMessage(e)) })
+  const createPOMutation      = useMutation({ mutationFn: inventoryApi.createPurchaseOrder, onSuccess: () => { toast.success('Purchase order created'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); setShowNewPO(false); poForm.reset() }, onError: (e) => toast.error(getErrorMessage(e)) })
+  const confirmPOMutation     = useMutation({ mutationFn: inventoryApi.confirmPurchaseOrder, onSuccess: () => { toast.success('PO confirmed — ready to receive goods'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }) }, onError: (e) => toast.error(getErrorMessage(e)) })
+  const receivePOMutation     = useMutation({ mutationFn: inventoryApi.receivePurchaseOrder, onSuccess: () => { toast.success('Goods received — stock updated'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }); qc.invalidateQueries({ queryKey: ['stock'] }) }, onError: (e) => toast.error(getErrorMessage(e)) })
+  const cancelPOMutation      = useMutation({ mutationFn: inventoryApi.cancelPurchaseOrder, onSuccess: () => { toast.success('PO cancelled'); qc.invalidateQueries({ queryKey: ['purchase-orders'] }) }, onError: (e) => toast.error(getErrorMessage(e)) })
+  const createBillFromPoMutation = useMutation({
+    mutationFn: (poId: string) => accountingApi.createBillFromPo(poId),
+    onSuccess: () => {
+      toast.success('Draft bill created in Accounting → Bills')
+      qc.invalidateQueries({ queryKey: ['accounting-bills'] })
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  })
 
   /* ── SO mutations ── */
   const soForm = useForm<SOForm>({ resolver: zodResolver(soSchema), defaultValues: { currency: 'NGN', orderDate: today, lines: [{ productId: '', quantity: 1, unitPrice: 0, taxRate: 7.5, discountAmount: 0 }] } })
@@ -625,8 +636,8 @@ export default function InventoryPage() {
                 <EmptyState message="No purchase orders yet. Create one to restock inventory." icon={<TruckIcon size={28} />} />
               ) : poList.map((po) => (
                 <Tr key={po.id}>
-                  <Td><span className="font-mono font-semibold text-gray-700">{po.orderNumber}</span></Td>
-                  <Td className="font-semibold">{po.supplierName ?? po.vendorName}</Td>
+                  <Td><span className="font-mono font-semibold text-gray-700">{po.poNumber}</span></Td>
+                  <Td className="font-semibold">{po.vendorName}</Td>
                   <Td className="font-bold">{formatCurrency(po.totalAmount)}</Td>
                   <Td className="text-gray-500">{po.expectedDate ? formatDate(po.expectedDate) : '—'}</Td>
                   <Td><Badge variant={poStatusBadge(po.status) as any}>{po.status}</Badge></Td>
@@ -641,6 +652,15 @@ export default function InventoryPage() {
                       {po.status === 'SENT' && (
                         <button onClick={() => receivePOMutation.mutate(po.id)} className="text-[11px] font-semibold text-green-600 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-full flex items-center gap-1 transition-colors">
                           <CheckCircle2 size={10} /> Receive
+                        </button>
+                      )}
+                      {(po.status === 'RECEIVED' || po.status === 'PARTIALLY_RECEIVED') && (
+                        <button
+                          onClick={() => createBillFromPoMutation.mutate(po.id)}
+                          disabled={createBillFromPoMutation.isPending}
+                          className="text-[11px] font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 px-2 py-0.5 rounded-full flex items-center gap-1 transition-colors disabled:opacity-50"
+                        >
+                          <FileText size={10} /> Create Bill
                         </button>
                       )}
                       {(po.status === 'DRAFT' || po.status === 'SENT') && (
@@ -871,6 +891,7 @@ export default function InventoryPage() {
             <option value="-1">EXEMPT — VAT Exempt</option>
           </Select>
           <Input label="Reorder Point" type="number" {...productForm.register('reorderPoint')} hint="Low-stock alert triggers when stock reaches this level" />
+          <Input label="Expiry Date" type="date" {...productForm.register('expiryDate')} hint="Leave blank for non-perishable items. Used to track batch expiry in FIFO costing." />
           <div className="col-span-2 border-t border-gray-200 pt-4 mt-1">
             <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-3">Opening Stock (optional)</p>
             <div className="grid grid-cols-2 gap-4">
@@ -922,6 +943,7 @@ export default function InventoryPage() {
             <option value="-1">EXEMPT — VAT Exempt</option>
           </Select>
           <Input label="Reorder Point" type="number" {...editProductForm.register('reorderPoint')} />
+          <Input label="Expiry Date" type="date" {...editProductForm.register('expiryDate')} hint="Leave blank for non-perishable items" />
         </div>
       </Modal>
 
@@ -1021,19 +1043,29 @@ export default function InventoryPage() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="text-[12px] font-bold uppercase tracking-wide text-gray-500">Line Items</p>
-              <button type="button" onClick={() => appendPOLine({ productId: '', quantity: 1, unitPrice: 0, taxRate: 7.5, discountAmount: 0 })} className="text-[12px] font-semibold text-green-600 hover:text-green-700 flex items-center gap-1"><Plus size={12} /> Add line</button>
+              <button type="button" onClick={() => appendPOLine({ productId: '', quantity: 1, unitPrice: 0, taxRate: 7.5, discountAmount: 0, taxIncluded: false })} className="text-[12px] font-semibold text-green-600 hover:text-green-700 flex items-center gap-1"><Plus size={12} /> Add line</button>
+            </div>
+            {/* Column headers */}
+            <div className="grid grid-cols-[1fr_70px_110px_150px_24px] gap-2 px-3 mb-1">
+              {['Product', 'Qty', 'Unit Price', 'Tax on this price?', ''].map((h) => (
+                <p key={h} className="text-[10.5px] font-bold uppercase tracking-wide text-gray-400">{h}</p>
+              ))}
             </div>
             <div className="space-y-2">
               {poLines.map((field, i) => (
-                <div key={field.id} className="grid grid-cols-[1fr_80px_110px_24px] gap-2 items-end p-3 bg-gray-50 rounded-[8px] border border-gray-200">
-                  <Select label={i === 0 ? 'Product' : undefined} {...poForm.register(`lines.${i}.productId`)}>
+                <div key={field.id} className="grid grid-cols-[1fr_70px_110px_150px_24px] gap-2 items-center p-3 bg-gray-50 rounded-[8px] border border-gray-200">
+                  <Select {...poForm.register(`lines.${i}.productId`)}>
                     <option value="">Select product…</option>
                     {productList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </Select>
-                  <Input label={i === 0 ? 'Qty' : undefined} type="number" step="0.01" {...poForm.register(`lines.${i}.quantity`)} />
-                  <Input label={i === 0 ? 'Unit Price' : undefined} type="number" step="0.01" {...poForm.register(`lines.${i}.unitPrice`)} />
+                  <Input type="number" step="0.01" {...poForm.register(`lines.${i}.quantity`)} />
+                  <Input type="number" step="0.01" {...poForm.register(`lines.${i}.unitPrice`)} />
+                  <Select {...poForm.register(`lines.${i}.taxIncluded`, { setValueAs: (v) => v === 'true' })}>
+                    <option value="false">+ Add 7.5% VAT</option>
+                    <option value="true">VAT already included</option>
+                  </Select>
                   {poLines.length > 1
-                    ? <button type="button" onClick={() => removePOLine(i)} className={cn('w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500', i === 0 ? 'mt-[22px]' : '')}><Trash2 size={12} /></button>
+                    ? <button type="button" onClick={() => removePOLine(i)} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500"><Trash2 size={12} /></button>
                     : <div />
                   }
                 </div>
@@ -1147,7 +1179,18 @@ export default function InventoryPage() {
             <div className="space-y-2">
               {soLines.map((field, i) => (
                 <div key={field.id} className="grid grid-cols-[1fr_80px_110px_24px] gap-2 items-end p-3 bg-gray-50 rounded-[8px] border border-gray-200">
-                  <Select label={i === 0 ? 'Product' : undefined} {...soForm.register(`lines.${i}.productId`)}>
+                  <Select
+                    label={i === 0 ? 'Product' : undefined}
+                    {...soForm.register(`lines.${i}.productId`)}
+                    onChange={(e) => {
+                      soForm.setValue(`lines.${i}.productId`, e.target.value, { shouldValidate: true })
+                      const prod = productList.find((p) => p.id === e.target.value)
+                      if (prod) {
+                        soForm.setValue(`lines.${i}.unitPrice`, prod.sellingPrice)
+                        soForm.setValue(`lines.${i}.taxRate`, prod.taxRate ?? 7.5)
+                      }
+                    }}
+                  >
                     <option value="">Select product…</option>
                     {productList.map((p) => <option key={p.id} value={p.id}>{p.name} — {formatCurrency(p.sellingPrice)}</option>)}
                   </Select>

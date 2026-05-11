@@ -299,7 +299,12 @@ export interface Bill {
   billNumber: string
   totalAmount: number
   dueDate: string
-  status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'PAID'
+  paidAmount?: number
+  subtotal?: number
+  taxAmount?: number
+  currency?: string
+  notes?: string
+  status: 'DRAFT' | 'PENDING' | 'APPROVED' | 'PAID' | 'PARTIALLY_PAID' | 'CANCELLED'
   createdAt: string
 }
 
@@ -435,23 +440,36 @@ export interface Warehouse {
 }
 
 export interface StockLevel {
+  id?: string
   productId: string
   productName: string
-  sku: string
+  productSku: string
+  warehouseId?: string
   warehouseName: string
-  quantity: number
-  reorderLevel: number
+  quantityOnHand: number
+  quantityReserved?: number
+  quantityAvailable?: number
+  reorderPoint?: number
 }
 
 export interface PurchaseOrder {
   id: string
-  orderNumber: string
-  supplierName: string       // backend may return vendorName; mapped here
-  vendorName?: string
+  poNumber: string
+  vendorName: string
+  vendorEmail?: string
+  warehouseId?: string
+  warehouseName?: string
+  subtotal?: number
+  taxAmount?: number
   totalAmount: number
-  status: 'DRAFT' | 'SENT' | 'CONFIRMED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED'
+  currency?: string
+  status: 'DRAFT' | 'SENT' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED'
+  orderDate?: string
   expectedDate?: string
+  notes?: string
+  tenantId?: string
   createdAt: string
+  updatedAt?: string
 }
 
 export interface StockMovement {

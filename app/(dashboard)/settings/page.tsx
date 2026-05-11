@@ -1,5 +1,3 @@
-'use client'
-
 import { useState, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -16,6 +14,8 @@ import {
   type UploadCryptoKeyRequest,
   type UpdateFirsCredentialsRequest,
   type DivisionKeyStatusResponse,
+  type CompanySettingsRequest,
+  type CompanySettings,
 } from '@/lib/api/settings'
 import { useAuthStore } from '@/store/auth'
 import { getErrorMessage } from '@/lib/api/client'
@@ -41,14 +41,15 @@ const passwordSchema = z.object({
 })
 type PasswordForm = z.infer<typeof passwordSchema>
 
-type Tab = 'profile' | 'password' | 'logo' | 'firs' | 'firs-admin'
+type Tab = 'profile' | 'password' | 'logo' | 'company' | 'firs' | 'firs-admin'
 
 const ALL_TABS: { key: Tab; label: string; icon: React.ElementType; description: string; roles?: string[] }[] = [
-  { key: 'profile',    label: 'My Profile',     icon: User,      description: 'Name, contact info' },
-  { key: 'password',   label: 'Security',        icon: Shield,    description: 'Password & access' },
-  { key: 'logo',       label: 'Company Logo',    icon: Building2, description: 'Branding & identity' },
-  { key: 'firs',       label: 'FIRS Keys',       icon: KeyRound,  description: 'Crypto keys & credentials', roles: ['DIVISION_ADMIN'] },
-  { key: 'firs-admin', label: 'Division Keys',   icon: KeyRound,  description: 'Manage division FIRS keys', roles: ['TENANT_ADMIN'] },
+  { key: 'profile',    label: 'My Profile',      icon: User,      description: 'Name, contact info' },
+  { key: 'password',   label: 'Security',         icon: Shield,    description: 'Password & access' },
+  { key: 'logo',       label: 'Company Logo',     icon: Building2, description: 'Branding & identity' },
+  { key: 'company',    label: 'Company Profile',  icon: Briefcase, description: 'Receipt name, address, contact' },
+  { key: 'firs',       label: 'FIRS Keys',        icon: KeyRound,  description: 'Crypto keys & credentials', roles: ['DIVISION_ADMIN'] },
+  { key: 'firs-admin', label: 'Division Keys',    icon: KeyRound,  description: 'Manage division FIRS keys', roles: ['TENANT_ADMIN'] },
 ]
 
 /* ── Password field with toggle ── */
@@ -132,6 +133,7 @@ export default function SettingsPage() {
   const { user, setUser } = useAuthStore()
   const qc = useQueryClient()
   const [tab, setTab] = useState<Tab>('profile')
+  function switchTab(t: Tab) { setTab(t); if (t === 'company') setCompanyFormInit(false) }
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [dragOver, setDragOver] = useState(false)
@@ -217,6 +219,42 @@ export default function SettingsPage() {
     enabled: isDivisionAdmin,
   })
 
+  /* ── Root-tenant FIRS keys (TENANT_ADMIN own keys) ── */
+  const [rootExpandedForm, setRootExpandedForm] = useState<'keys' | 'creds' | null>(null)
+  const [rootPublicKey, setRootPublicKey]       = useState('')
+  const [rootCertificate, setRootCertificate]   = useState('')
+  const [rootServiceId, setRootServiceId]       = useState('')
+  const [rootBusinessId, setRootBusinessId]     = useState('')
+
+  const { data: rootKeyStatus, refetch: refetchRootKeyStatus } = useQuery({
+    queryKey: ['root-key-status'],
+    queryFn: () => settingsApi.getRootKeyStatus().then((r) => r.data.data),
+    enabled: isTenantAdmin,
+  })
+
+  const uploadRootKeysMutation = useMutation({
+    mutationFn: (data: UploadCryptoKeyRequest) => settingsApi.uploadKeysForRoot(data),
+    onSuccess: () => {
+      toast.success('Root FIRS keys uploaded successfully')
+      setRootPublicKey('')
+      setRootCertificate('')
+      setRootExpandedForm(null)
+      refetchRootKeyStatus()
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const updateRootFirsMutation = useMutation({
+    mutationFn: (data: UpdateFirsCredentialsRequest) => settingsApi.updateFirsCredentialsForRoot(data),
+    onSuccess: () => {
+      toast.success('Root FIRS credentials updated')
+      setRootServiceId('')
+      setRootBusinessId('')
+      setRootExpandedForm(null)
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
   /* ── Division FIRS keys (TENANT_ADMIN) ── */
   const [expandedDivision, setExpandedDivision] = useState<string | null>(null)
   const [expandedForm, setExpandedForm] = useState<'keys' | 'creds' | null>(null)
@@ -270,6 +308,56 @@ export default function SettingsPage() {
     }
   }
 
+  /* ── Company settings ── */
+  const [companyForm, setCompanyForm] = useState<CompanySettingsRequest>({})
+  const [companyFormInit, setCompanyFormInit] = useState(false)
+  const [expandedDivCompany, setExpandedDivCompany] = useState<string | null>(null)
+  const [divCompanyForms, setDivCompanyForms] = useState<Record<string, CompanySettingsRequest>>({})
+
+  const { data: companyData, refetch: refetchCompany } = useQuery({
+    queryKey: ['company-settings'],
+    queryFn: () => settingsApi.getCompanySettings().then((r) => r.data.data),
+    enabled: tab === 'company',
+  })
+
+  const { data: divisionCompanyData, refetch: refetchDivisionCompany } = useQuery({
+    queryKey: ['division-company-settings'],
+    queryFn: () => settingsApi.getDivisionCompanySettings().then((r) => r.data.data),
+    enabled: tab === 'company' && isTenantAdmin,
+  })
+
+  // Populate own company form when data loads
+  if (companyData && !companyFormInit) {
+    setCompanyForm({
+      companyName:    companyData.companyName    ?? '',
+      companyAddress: companyData.companyAddress ?? '',
+      companyPhone:   companyData.companyPhone   ?? '',
+      companyEmail:   companyData.companyEmail   ?? '',
+    })
+    setCompanyFormInit(true)
+  }
+
+  const updateCompanyMutation = useMutation({
+    mutationFn: (data: CompanySettingsRequest) => settingsApi.updateCompanySettings(data),
+    onSuccess: () => {
+      toast.success('Company settings saved')
+      setCompanyFormInit(false)
+      refetchCompany()
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const updateDivCompanyMutation = useMutation({
+    mutationFn: ({ divisionId, data }: { divisionId: string; data: CompanySettingsRequest }) =>
+      settingsApi.updateDivisionCompanySettings(divisionId, data),
+    onSuccess: () => {
+      toast.success('Division company settings saved')
+      refetchDivisionCompany()
+      setExpandedDivCompany(null)
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
   return (
     <div className="animate-fadeIn">
       {/* ── Page hero header ── */}
@@ -316,7 +404,7 @@ export default function SettingsPage() {
             return (
               <button
                 key={key}
-                onClick={() => setTab(key)}
+                onClick={() => switchTab(key)}
                 className={cn(
                   'w-full flex items-center gap-3 px-3.5 py-3 rounded-[10px] text-left transition-all duration-200 group',
                   active
@@ -676,9 +764,333 @@ export default function SettingsPage() {
             </div>
           )}
 
+          {/* ══ COMPANY PROFILE TAB ══ */}
+          {tab === 'company' && (
+            <div className="space-y-4">
+
+              {/* Own company settings */}
+              <div className="bg-white border border-gray-200 rounded-[14px] shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-[15px] font-bold text-gray-900">Receipt Company Info</h2>
+                    <p className="text-[12.5px] text-gray-500 mt-0.5">
+                      This information appears on all PDF receipts and invoices generated for your organisation
+                    </p>
+                  </div>
+                  <div className="w-9 h-9 rounded-[10px] bg-green-50 flex items-center justify-center">
+                    <Briefcase size={16} className="text-green-600" />
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[13px] font-semibold text-gray-700">Company Name</label>
+                      <input
+                        value={companyForm.companyName ?? ''}
+                        onChange={(e) => setCompanyForm((f) => ({ ...f, companyName: e.target.value }))}
+                        placeholder="e.g. Bluechip Technologies Ltd"
+                        className="w-full px-3 py-[10px] border border-gray-200 rounded-[8px] text-[13.5px] bg-gray-50 outline-none transition-all focus:border-green-500 focus:bg-white focus:shadow-[0_0_0_3px_rgba(34,197,94,.12)]"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[13px] font-semibold text-gray-700">Contact Email</label>
+                      <input
+                        value={companyForm.companyEmail ?? ''}
+                        onChange={(e) => setCompanyForm((f) => ({ ...f, companyEmail: e.target.value }))}
+                        placeholder="e.g. info@yourcompany.com"
+                        className="w-full px-3 py-[10px] border border-gray-200 rounded-[8px] text-[13.5px] bg-gray-50 outline-none transition-all focus:border-green-500 focus:bg-white focus:shadow-[0_0_0_3px_rgba(34,197,94,.12)]"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[13px] font-semibold text-gray-700">Phone Number</label>
+                      <input
+                        value={companyForm.companyPhone ?? ''}
+                        onChange={(e) => setCompanyForm((f) => ({ ...f, companyPhone: e.target.value }))}
+                        placeholder="e.g. +234-xxx-xxx-xxxx"
+                        className="w-full px-3 py-[10px] border border-gray-200 rounded-[8px] text-[13.5px] bg-gray-50 outline-none transition-all focus:border-green-500 focus:bg-white focus:shadow-[0_0_0_3px_rgba(34,197,94,.12)]"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[13px] font-semibold text-gray-700">Address</label>
+                      <input
+                        value={companyForm.companyAddress ?? ''}
+                        onChange={(e) => setCompanyForm((f) => ({ ...f, companyAddress: e.target.value }))}
+                        placeholder="e.g. Victoria Island, Lagos"
+                        className="w-full px-3 py-[10px] border border-gray-200 rounded-[8px] text-[13.5px] bg-gray-50 outline-none transition-all focus:border-green-500 focus:bg-white focus:shadow-[0_0_0_3px_rgba(34,197,94,.12)]"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      loading={updateCompanyMutation.isPending}
+                      onClick={() => updateCompanyMutation.mutate(companyForm)}
+                    >
+                      Save Company Info
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Division company settings — TENANT_ADMIN only */}
+              {isTenantAdmin && (
+                <div className="bg-white border border-gray-200 rounded-[14px] shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-[15px] font-bold text-gray-900">Division Company Info</h2>
+                      <p className="text-[12.5px] text-gray-500 mt-0.5">
+                        Configure receipt details separately for each division
+                      </p>
+                    </div>
+                    <div className="w-9 h-9 rounded-[10px] bg-indigo-50 flex items-center justify-center">
+                      <Building2 size={16} className="text-indigo-500" />
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-gray-100">
+                    {!divisionCompanyData || divisionCompanyData.length === 0 ? (
+                      <div className="p-8 text-center">
+                        <p className="text-[13px] text-gray-400">No divisions found. Create divisions first.</p>
+                      </div>
+                    ) : (
+                      divisionCompanyData.map((div: CompanySettings) => {
+                        const isOpen = expandedDivCompany === div.id
+                        const form   = divCompanyForms[div.id] ?? {
+                          companyName:    div.companyName    ?? '',
+                          companyAddress: div.companyAddress ?? '',
+                          companyPhone:   div.companyPhone   ?? '',
+                          companyEmail:   div.companyEmail   ?? '',
+                        }
+                        const setForm = (updater: (prev: CompanySettingsRequest) => CompanySettingsRequest) =>
+                          setDivCompanyForms((all) => ({ ...all, [div.id]: updater(form) }))
+
+                        return (
+                          <div key={div.id} className="p-5">
+                            <div className="flex items-center gap-4">
+                              <div className="w-9 h-9 rounded-[10px] bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                <Building2 size={15} className="text-gray-500" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[13.5px] font-bold text-gray-900">{div.name}</p>
+                                <p className="text-[11.5px] text-gray-400 truncate">
+                                  {div.companyName || <span className="italic">No company name set</span>}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => setExpandedDivCompany(isOpen ? null : div.id)}
+                                className="text-[12px] font-semibold px-3 py-1.5 rounded-[7px] border border-gray-200 text-gray-600 hover:border-green-300 hover:text-green-600 transition-colors"
+                              >
+                                {isOpen ? 'Close' : 'Edit'}
+                              </button>
+                            </div>
+
+                            {isOpen && (
+                              <div className="mt-4 ml-[52px] space-y-3 p-4 bg-gray-50 rounded-[10px] border border-gray-200">
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="text-[12px] font-semibold text-gray-700 block mb-1">Company Name</label>
+                                    <input
+                                      value={form.companyName ?? ''}
+                                      onChange={(e) => setForm((f) => ({ ...f, companyName: e.target.value }))}
+                                      placeholder="Division company name"
+                                      className="w-full px-3 py-[10px] border border-gray-200 rounded-[8px] text-[13px] bg-white outline-none focus:border-green-500 focus:shadow-[0_0_0_3px_rgba(34,197,94,.12)] transition-all"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[12px] font-semibold text-gray-700 block mb-1">Contact Email</label>
+                                    <input
+                                      value={form.companyEmail ?? ''}
+                                      onChange={(e) => setForm((f) => ({ ...f, companyEmail: e.target.value }))}
+                                      placeholder="division@company.com"
+                                      className="w-full px-3 py-[10px] border border-gray-200 rounded-[8px] text-[13px] bg-white outline-none focus:border-green-500 focus:shadow-[0_0_0_3px_rgba(34,197,94,.12)] transition-all"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[12px] font-semibold text-gray-700 block mb-1">Phone Number</label>
+                                    <input
+                                      value={form.companyPhone ?? ''}
+                                      onChange={(e) => setForm((f) => ({ ...f, companyPhone: e.target.value }))}
+                                      placeholder="+234-xxx-xxx-xxxx"
+                                      className="w-full px-3 py-[10px] border border-gray-200 rounded-[8px] text-[13px] bg-white outline-none focus:border-green-500 focus:shadow-[0_0_0_3px_rgba(34,197,94,.12)] transition-all"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[12px] font-semibold text-gray-700 block mb-1">Address</label>
+                                    <input
+                                      value={form.companyAddress ?? ''}
+                                      onChange={(e) => setForm((f) => ({ ...f, companyAddress: e.target.value }))}
+                                      placeholder="Division address"
+                                      className="w-full px-3 py-[10px] border border-gray-200 rounded-[8px] text-[13px] bg-white outline-none focus:border-green-500 focus:shadow-[0_0_0_3px_rgba(34,197,94,.12)] transition-all"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                  <Button variant="outline" onClick={() => setExpandedDivCompany(null)}>Cancel</Button>
+                                  <Button
+                                    loading={updateDivCompanyMutation.isPending}
+                                    onClick={() => updateDivCompanyMutation.mutate({ divisionId: div.id, data: form })}
+                                  >
+                                    Save
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ══ DIVISION FIRS KEYS TAB (TENANT_ADMIN) ══ */}
           {tab === 'firs-admin' && isTenantAdmin && (
             <div className="space-y-4">
+
+              {/* ── My Own FIRS Keys (root tenant) ── */}
+              <div className="bg-white border border-gray-200 rounded-[14px] shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-[15px] font-bold text-gray-900">My FIRS Keys</h2>
+                    <p className="text-[12.5px] text-gray-500 mt-0.5">
+                      Your own cryptographic keys and FIRS credentials — required to fiscalize invoices as Tenant Admin
+                    </p>
+                  </div>
+                  <div className="w-9 h-9 rounded-[10px] bg-green-50 flex items-center justify-center">
+                    <KeyRound size={16} className="text-green-600" />
+                  </div>
+                </div>
+
+                <div className="p-5 space-y-4">
+                  {/* Key status */}
+                  <div className="flex items-center gap-4">
+                    <div className="w-9 h-9 rounded-[10px] bg-gray-100 flex items-center justify-center flex-shrink-0">
+                      <KeyRound size={15} className="text-gray-500" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-[13.5px] font-bold text-gray-900">Root Tenant Key</p>
+                      {rootKeyStatus?.hasActiveKey && rootKeyStatus.uploadedAt && (
+                        <p className="text-[11.5px] text-gray-400 mt-0.5">
+                          Uploaded {new Date(rootKeyStatus.uploadedAt).toLocaleDateString()}
+                          {rootKeyStatus.uploadedBy ? ` by ${rootKeyStatus.uploadedBy}` : ''}
+                          {rootKeyStatus.expiresAt ? ` · Expires ${new Date(rootKeyStatus.expiresAt).toLocaleDateString()}` : ''}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {rootKeyStatus?.hasActiveKey ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-green-100 text-green-700 px-2.5 py-1 rounded-full">
+                          <CheckCircle2 size={10} /> Active Key
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full">
+                          <AlertCircle size={10} /> No Key
+                        </span>
+                      )}
+                      <button
+                        onClick={() => setRootExpandedForm(rootExpandedForm === 'keys' ? null : 'keys')}
+                        className={cn(
+                          'text-[12px] font-semibold px-3 py-1.5 rounded-[7px] border transition-colors',
+                          rootExpandedForm === 'keys'
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                            : 'border-gray-200 text-gray-600 hover:border-indigo-300 hover:text-indigo-600'
+                        )}
+                      >
+                        {rootKeyStatus?.hasActiveKey ? 'Replace Keys' : 'Upload Keys'}
+                      </button>
+                      <button
+                        onClick={() => setRootExpandedForm(rootExpandedForm === 'creds' ? null : 'creds')}
+                        className={cn(
+                          'text-[12px] font-semibold px-3 py-1.5 rounded-[7px] border transition-colors',
+                          rootExpandedForm === 'creds'
+                            ? 'bg-green-50 border-green-200 text-green-700'
+                            : 'border-gray-200 text-gray-600 hover:border-green-300 hover:text-green-600'
+                        )}
+                      >
+                        FIRS Credentials
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Upload Keys form */}
+                  {rootExpandedForm === 'keys' && (
+                    <div className="ml-[52px] space-y-3 p-4 bg-gray-50 rounded-[10px] border border-gray-200">
+                      <div>
+                        <label className="text-[12px] font-semibold text-gray-700 block mb-1">Public Key (PEM)</label>
+                        <textarea
+                          value={rootPublicKey}
+                          onChange={(e) => setRootPublicKey(e.target.value)}
+                          placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----"
+                          rows={4}
+                          className="w-full px-3 py-2.5 border border-gray-200 rounded-[8px] text-[12px] font-mono bg-white outline-none transition-all focus:border-indigo-400 focus:shadow-[0_0_0_3px_rgba(99,102,241,.1)] resize-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[12px] font-semibold text-gray-700 block mb-1">Certificate (PEM)</label>
+                        <textarea
+                          value={rootCertificate}
+                          onChange={(e) => setRootCertificate(e.target.value)}
+                          placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+                          rows={4}
+                          className="w-full px-3 py-2.5 border border-gray-200 rounded-[8px] text-[12px] font-mono bg-white outline-none transition-all focus:border-indigo-400 focus:shadow-[0_0_0_3px_rgba(99,102,241,.1)] resize-none"
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setRootExpandedForm(null)}>Cancel</Button>
+                        <Button
+                          loading={uploadRootKeysMutation.isPending}
+                          disabled={!rootPublicKey.trim() || !rootCertificate.trim()}
+                          onClick={() => uploadRootKeysMutation.mutate({ publicKey: rootPublicKey, certificate: rootCertificate })}
+                        >
+                          {rootKeyStatus?.hasActiveKey ? 'Replace Keys' : 'Upload Keys'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* FIRS Credentials form */}
+                  {rootExpandedForm === 'creds' && (
+                    <div className="ml-[52px] space-y-3 p-4 bg-gray-50 rounded-[10px] border border-gray-200">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[12px] font-semibold text-gray-700 block mb-1">Service ID</label>
+                          <input
+                            value={rootServiceId}
+                            onChange={(e) => setRootServiceId(e.target.value)}
+                            placeholder="e.g. SVC-001"
+                            className="w-full px-3 py-[10px] border border-gray-200 rounded-[8px] text-[13px] bg-white outline-none transition-all focus:border-green-500 focus:shadow-[0_0_0_3px_rgba(34,197,94,.12)]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[12px] font-semibold text-gray-700 block mb-1">Business ID</label>
+                          <input
+                            value={rootBusinessId}
+                            onChange={(e) => setRootBusinessId(e.target.value)}
+                            placeholder="e.g. FIRS-BIZ-00123"
+                            className="w-full px-3 py-[10px] border border-gray-200 rounded-[8px] text-[13px] bg-white outline-none transition-all focus:border-green-500 focus:shadow-[0_0_0_3px_rgba(34,197,94,.12)]"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setRootExpandedForm(null)}>Cancel</Button>
+                        <Button
+                          loading={updateRootFirsMutation.isPending}
+                          disabled={!rootServiceId.trim() || !rootBusinessId.trim()}
+                          onClick={() => updateRootFirsMutation.mutate({ serviceId: rootServiceId, businessId: rootBusinessId })}
+                        >
+                          Save Credentials
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Division FIRS Keys ── */}
               <div className="bg-white border border-gray-200 rounded-[14px] shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                   <div>

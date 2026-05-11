@@ -3,8 +3,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import {
-  FileText, Users, TrendingUp, DollarSign, UserPlus, ShoppingCart,
-  AlertTriangle, CheckCircle2, Clock, Zap, Package, ArrowUpRight,
+  FileText, Users, TrendingUp, UserPlus, ShoppingCart,
+  AlertTriangle, CheckCircle2, Zap, ArrowUpRight,
   BarChart3, Activity, ChevronRight,
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
@@ -38,14 +38,11 @@ function BarChart({ data }: { data: { label: string; value: number }[] }) {
 
 /* ── KPI Card ── */
 function KpiCard({
-  label, value, sub, icon: Icon, iconBg, iconColor, trend, onClick,
+  label, value, sub, trend, onClick,
 }: {
   label: string
   value: string | number
   sub?: string
-  icon: React.ElementType
-  iconBg: string
-  iconColor: string
   trend?: { value: string; up: boolean }
   onClick?: () => void
 }) {
@@ -53,26 +50,21 @@ function KpiCard({
     <div
       onClick={onClick}
       className={cn(
-        'bg-white border border-gray-200 rounded-[12px] p-5 shadow-sm flex items-start justify-between gap-3 transition-all',
+        'bg-white border border-gray-200 rounded-[12px] p-5 shadow-sm transition-all',
         onClick && 'cursor-pointer hover:-translate-y-[2px] hover:shadow-md hover:border-green-200'
       )}
     >
-      <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-bold uppercase tracking-[.06em] text-gray-400">{label}</p>
-        <p className="text-[26px] font-extrabold text-gray-900 leading-tight mt-1">{value}</p>
-        {sub && <p className="text-[12px] text-gray-400 mt-0.5">{sub}</p>}
-        {trend && (
-          <span className={cn(
-            'inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full mt-1.5',
-            trend.up ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
-          )}>
-            {trend.up ? '↑' : '↓'} {trend.value}
-          </span>
-        )}
-      </div>
-      <div className={cn('w-11 h-11 rounded-[10px] flex items-center justify-center flex-shrink-0', iconBg)}>
-        <Icon size={20} className={iconColor} />
-      </div>
+      <p className="text-[11px] font-bold uppercase tracking-[.06em] text-gray-400">{label}</p>
+      <p className="text-[26px] font-extrabold text-gray-900 leading-tight mt-1">{value}</p>
+      {sub && <p className="text-[12px] text-gray-400 mt-0.5">{sub}</p>}
+      {trend && (
+        <span className={cn(
+          'inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full mt-1.5',
+          trend.up ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
+        )}>
+          {trend.up ? '↑' : '↓'} {trend.value}
+        </span>
+      )}
     </div>
   )
 }
@@ -231,36 +223,24 @@ export default function DashboardPage() {
           label="Total Revenue"
           value={formatCurrency(totalRevenue)}
           sub="From fiscalized invoices"
-          icon={DollarSign}
-          iconBg="bg-green-50"
-          iconColor="text-green-600"
           onClick={() => router.push('/invoices')}
         />
         <KpiCard
           label="Outstanding"
           value={formatCurrency(outstanding)}
           sub={`${draftCnt} draft invoice${draftCnt !== 1 ? 's' : ''}`}
-          icon={Clock}
-          iconBg="bg-amber-50"
-          iconColor="text-amber-500"
           onClick={() => router.push('/invoices')}
         />
         <KpiCard
           label="Pipeline Value"
           value={formatCurrency(pipelineValue)}
           sub={`${openLeads} open lead${openLeads !== 1 ? 's' : ''}`}
-          icon={TrendingUp}
-          iconBg="bg-blue-50"
-          iconColor="text-blue-500"
           onClick={() => router.push('/crm')}
         />
         <KpiCard
           label="Low Stock Items"
           value={lowStockCount}
           sub={lowStockCount > 0 ? 'Needs restocking' : 'All stock healthy'}
-          icon={lowStockCount > 0 ? AlertTriangle : Package}
-          iconBg={lowStockCount > 0 ? 'bg-red-50' : 'bg-green-50'}
-          iconColor={lowStockCount > 0 ? 'text-red-500' : 'text-green-600'}
           onClick={() => router.push('/inventory')}
         />
       </div>
@@ -390,8 +370,8 @@ export default function DashboardPage() {
                       <p className="text-[11px] text-gray-400">{item.warehouseName}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[13px] font-bold text-red-600">{item.quantity}</p>
-                      <p className="text-[10.5px] text-gray-400">min {item.reorderLevel}</p>
+                      <p className="text-[13px] font-bold text-red-600">{Number(item.quantityOnHand ?? 0).toFixed(2)}</p>
+                      <p className="text-[10.5px] text-gray-400">min {item.reorderPoint ?? '—'}</p>
                     </div>
                   </div>
                 ))}

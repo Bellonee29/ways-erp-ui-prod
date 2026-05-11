@@ -20,9 +20,9 @@ const STATS = [
 const FEATURES = [
   {
     icon: Receipt,
-    title: 'FIRS e-Invoicing',
-    desc: 'Issue FIRS-compliant invoices with automatic IRN generation, QR codes, and real-time fiscalization — no manual filing.',
-    badge: 'FIRS Certified',
+    title: 'NRS e-Invoicing',
+    desc: 'Issue NRS-compliant invoices with automatic IRN generation, QR codes, and real-time fiscalization — no manual filing.',
+    badge: 'NRS Compliance',
     color: 'green',
   },
   {
@@ -75,13 +75,13 @@ const STEPS = [
   {
     num: 1,
     title: 'Register your organisation',
-    desc: 'Please contact the administrator at bellowajiuo@gmail.com or +2349039156872 to create your account with your company details and FIRS credentials. This process takes under five minutes.',
-    // action: { label: 'Register now', href: '/register' },
+    desc: 'Please contact the administrator at bellowajiuo@gmail.com or +2349039156872 to create your account with your company details and NRS credentials. This process takes under five minutes.',
+    action: { label: 'Register now', href: '/register' },
   },
   {
     num: 2,
     title: 'Await admin approval',
-    desc: 'Our team verifies your FIRS TIN and activates your tenant — usually within 24 hours.',
+    desc: 'Our team verifies your NRS TIN and activates your tenant — usually within 24 hours.',
     action: null,
   },
   {
@@ -93,7 +93,7 @@ const STEPS = [
   {
     num: 4,
     title: 'Go live',
-    desc: 'Issue your first FIRS-fiscalised invoice and start running your business on WaysERP.',
+    desc: 'Issue your first NRS-fiscalised invoice and start running your business on WaysERP.',
     action: null,
   },
 ]
@@ -104,7 +104,7 @@ const TESTIMONIALS = [
     role: 'CFO, Meridian Supplies Ltd',
     avatar: 'AO',
     color: 'bg-green-600',
-    quote: 'WaysERP cut our invoicing time by 70%. FIRS compliance used to take us a full day every month — now it&apos;s automatic.',
+    quote: 'WaysERP cut our invoicing time by 70%. NRS compliance used to take us a full day every month — now it&apos;s automatic.',
   },
   {
     name: 'Emeka Nwosu',
@@ -124,7 +124,7 @@ const TESTIMONIALS = [
 
 const TRUST_ITEMS = [
   { icon: Shield,   label: 'Bank-grade encryption' },
-  { icon: Globe,    label: 'FIRS certified platform' },
+  { icon: Globe,    label: 'NRS compliance platform' },
   { icon: Zap,      label: 'Real-time fiscalization'  },
   { icon: Bell,     label: 'Instant notifications'    },
   { icon: Lock,     label: 'Role-based access'        },
@@ -158,9 +158,9 @@ export default function HomePage() {
           </nav>
           {/* CTA */}
           <div className="flex items-center gap-3">
-            {/* <Link href="/login"
+             {/* <Link href="/register"
               className="text-[14px] font-semibold text-gray-600 hover:text-gray-900 px-4 py-2 transition-colors">
-              Sign in
+              Get started free
             </Link> */}
             <Link href="/login"
               className="text-[14px] font-bold text-white bg-green-600 hover:bg-green-700 px-5 py-2.5 rounded-[8px] transition-colors shadow-sm">
@@ -184,7 +184,7 @@ export default function HomePage() {
           {/* Badge */}
           <div className="flex justify-center mb-8">
             <span className="inline-flex items-center gap-1.5 bg-green-50 border border-green-200 text-green-700 text-[12px] font-bold px-4 py-1.5 rounded-full tracking-wide uppercase">
-              <Zap size={11} fill="currentColor" /> FIRS-certified e-Invoicing
+              <Zap size={11} fill="currentColor" /> NRS-compliance e-Invoicing
             </span>
           </div>
 
@@ -200,11 +200,11 @@ export default function HomePage() {
           </h1>
 
           <p className="text-center text-[18px] text-gray-500 leading-relaxed max-w-2xl mx-auto mt-7">
-            The all-in-one ERP for Nigerian businesses — invoice, manage inventory, close deals, and handle accounting with built-in FIRS fiscalization.
+            The all-in-one ERP for Nigerian businesses — invoice, manage inventory, close deals, and handle accounting with built-in NRS fiscalization.
           </p>
 
           {/* Buttons */}
-          {/* <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-10">
+{/*           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-10">
             <Link href="/register"
               className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold px-8 py-4 rounded-[10px] text-[16px] transition-all shadow-lg shadow-green-200">
               Start for free <ArrowRight size={18} />
@@ -448,7 +448,7 @@ export default function HomePage() {
 
             <div className="grid sm:grid-cols-2 gap-3 mb-8 text-left">
               {[
-                'FIRS-compliant e-Invoicing',
+                'NRS-compliance e-Invoicing',
                 'Unlimited team members',
                 'CRM & sales pipeline',
                 'Inventory management',
@@ -466,9 +466,9 @@ export default function HomePage() {
 
             <Link href="/login"
               className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold px-8 py-4 rounded-[10px] text-[16px] transition-all shadow-lg shadow-green-200 w-full justify-center">
-              Sign in <ArrowRight size={18} />
+              Sign In <ArrowRight size={18} />
             </Link>
-            {/* <p className="text-[12px] text-gray-400 mt-3">Already registered? <Link href="/login" className="text-green-600 font-semibold hover:underline">Sign in →</Link></p> */}
+{/*             <p className="text-[12px] text-gray-400 mt-3">Already registered? <Link href="/login" className="text-green-600 font-semibold hover:underline">Sign in →</Link></p> */}
           </div>
         </div>
       </section>
@@ -484,14 +484,14 @@ export default function HomePage() {
                 Ready to modernise your business operations?
               </h2>
               <p className="text-green-100 mt-4 text-[16px] max-w-xl mx-auto leading-relaxed">
-                Join hundreds of Nigerian businesses running on WaysERP. FIRS-certified, locally built, and designed for growth.
+                Join hundreds of Nigerian businesses running on WaysERP. NRS-compliance, locally built, and designed for growth.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
                 <Link href="/login"
                   className="inline-flex items-center gap-2 bg-white text-green-700 font-bold px-8 py-4 rounded-[10px] text-[15px] hover:shadow-2xl transition-all">
                   Sign in <ArrowRight size={18} />
                 </Link>
-                {/* <Link href="/login"
+{/*                 <Link href="/login"
                   className="inline-flex items-center gap-2 border-2 border-white/30 text-white font-semibold px-8 py-4 rounded-[10px] text-[15px] hover:bg-white/10 transition-all">
                   Sign in
                 </Link> */}
@@ -511,7 +511,7 @@ export default function HomePage() {
                 <span className="font-bold text-gray-900 text-[16px]">WaysERP</span>
               </div>
               <p className="text-[13px] text-gray-400 leading-relaxed">
-                The all-in-one ERP platform built for Nigerian businesses. FIRS-certified and compliant.
+                The all-in-one ERP platform built for Nigerian businesses. NRS-compliance and compliant.
               </p>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-8 text-[13px]">
@@ -533,7 +533,7 @@ export default function HomePage() {
               <div>
                 <p className="font-bold text-gray-700 mb-3">Compliance</p>
                 <div className="space-y-2 text-gray-400">
-                  <p>FIRS e-Invoice</p>
+                  <p>NRS e-Invoice</p>
                   <p>Data Privacy</p>
                   <p>ISO 27001</p>
                 </div>
@@ -542,7 +542,7 @@ export default function HomePage() {
           </div>
           <div className="border-t border-gray-200 pt-6 flex flex-col md:flex-row items-center justify-between gap-3 text-[12px] text-gray-400">
             <p>© {new Date().getFullYear()} WaysERP · All rights reserved</p>
-            <p>Built with ❤ for Nigerian businesses · FIRS Certified Platform</p>
+            <p>Built with ❤ for Nigerian businesses · NRS compliance Platform</p>
           </div>
         </div>
       </footer>

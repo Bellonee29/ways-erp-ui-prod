@@ -715,28 +715,6 @@ export default function CrmPage() {
       </Modal>
 
       {/* New Activity */}
-      {/* <Modal open={showNewActivity} onClose={() => { setShowNewActivity(false); activityForm.reset() }} title="Log Activity" size="sm"
-        footer={<><Button variant="outline" onClick={() => setShowNewActivity(false)}>Cancel</Button><Button loading={createActivityMutation.isPending} onClick={activityForm.handleSubmit((v) => createActivityMutation.mutate(v))}>Log Activity</Button></>}>
-        <div className="space-y-4">
-          <Select label="Activity Type" required {...activityForm.register('type')} error={activityForm.formState.errors.type?.message} hint="Type of activity to log">
-            <option value="">Select type…</option>
-            <option value="CALL">Phone Call</option>
-            <option value="EMAIL">Email</option>
-            <option value="MEETING">Meeting</option>
-            <option value="DEMO">Demo / Presentation</option>
-            <option value="FOLLOW_UP">Follow-up</option>
-            <option value="NOTE">Note</option>
-          </Select>
-          <Input label="Subject" required {...activityForm.register('subject')} error={activityForm.formState.errors.subject?.message} hint="Brief summary of the activity" />
-          <Input label="Due Date" type="date" {...activityForm.register('dueDate')} hint="When this activity is due (optional)" />
-          <div>
-            <label className="text-[13px] font-semibold text-gray-700 block mb-1.5">Description <span className="text-gray-400 font-normal">(optional)</span></label>
-            <textarea {...activityForm.register('description')} rows={3} placeholder="Details about this activity…" className="w-full px-3 py-[9px] border border-gray-200 rounded-[6px] text-[13.5px] text-gray-800 bg-gray-50 outline-none transition-all focus:border-green-500 focus:bg-white focus:shadow-[0_0_0_3px_rgba(34,197,94,.1)] resize-none" />
-          </div>
-        </div>
-      </Modal> */}
-
-      {/* New Activity */}
       <Modal open={showNewActivity} onClose={() => { setShowNewActivity(false); activityForm.reset() }} title="Log Activity" size="sm"
         footer={<>
           <Button variant="outline" onClick={() => setShowNewActivity(false)}>Cancel</Button>

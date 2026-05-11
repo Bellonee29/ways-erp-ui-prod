@@ -15,7 +15,7 @@ import Modal from '@/components/ui/Modal'
 import Button from '@/components/ui/Button'
 import Input, { Select } from '@/components/ui/Input'
 import { formatCurrency } from '@/lib/utils'
-import type { Contact, Product } from '@/types'
+import type { Contact, Product, SalesOrder } from '@/types'
 
 /* ── schemas ── */
 const itemSchema = z.object({
@@ -68,12 +68,14 @@ function calcLine(qty: number, price: number, taxRate: number, discPct: number) 
 const today = new Date().toISOString().slice(0, 10)
 
 export default function NewInvoiceModal({ open, onClose, onSuccess, salesOrderId, initialCustomerName }: Props) {
-  const [submitting, setSubmitting]           = useState(false)
-  const [contactSearch, setContactSearch]     = useState('')
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
-  const [showPicker, setShowPicker]           = useState(false)
-  const [productSearch, setProductSearch]     = useState('')
+  const [submitting, setSubmitting]                   = useState(false)
+  const [contactSearch, setContactSearch]             = useState('')
+  const [selectedContact, setSelectedContact]         = useState<Contact | null>(null)
+  const [showPicker, setShowPicker]                   = useState(false)
+  const [productSearch, setProductSearch]             = useState('')
   const [activeProductPicker, setActiveProductPicker] = useState<number | null>(null)
+  const [pendingValues, setPendingValues]             = useState<FormValues | null>(null)
+  const [showSaveContact, setShowSaveContact]         = useState(false)
 
   const {
     register, control, handleSubmit, watch, setValue,
@@ -94,12 +96,43 @@ export default function NewInvoiceModal({ open, onClose, onSuccess, salesOrderId
   const watchedItems = watch('items')
   const currency     = watch('currency') || 'NGN'
 
+  /* fetch SO details to pre-fill when opened from a Sales Order */
+  const { data: soData } = useQuery<SalesOrder | null>({
+    queryKey: ['so-for-invoice', salesOrderId],
+    queryFn: () =>
+      salesOrderId
+        ? inventoryApi.getSalesOrderById(salesOrderId).then((r) => r.data.data as SalesOrder)
+        : Promise.resolve(null),
+    enabled: !!salesOrderId && open,
+  })
+
   useEffect(() => {
-    if (open && salesOrderId) {
-      setValue('salesOrderId', salesOrderId)
-      if (initialCustomerName) setValue('customerName', initialCustomerName)
+    if (!open || !salesOrderId) return
+    setValue('salesOrderId', salesOrderId)
+
+    if (soData) {
+      if (soData.customerName) setValue('customerName', soData.customerName)
+      if (soData.customerEmail) setValue('customerEmail', soData.customerEmail)
+
+      if (soData.lines && soData.lines.length > 0) {
+        setValue(
+          'items',
+          soData.lines.map((line) => ({
+            productId:          line.productId ?? undefined,
+            description:        line.productName ?? line.productId ?? '',
+            quantity:           Number(line.quantity) || 1,
+            unitPrice:          Number(line.unitPrice) || 0,
+            taxRate:            Number(line.taxRate) ?? 7.5,
+            discountPercentage: 0,
+            hsnCode:            undefined,
+            taxCategoryId:      'STANDARD_VAT',
+          }))
+        )
+      }
+    } else if (initialCustomerName) {
+      setValue('customerName', initialCustomerName)
     }
-  }, [open, salesOrderId, initialCustomerName, setValue])
+  }, [open, salesOrderId, soData, initialCustomerName, setValue])
 
   /* load contacts for picker */
   const { data: contactsData } = useQuery({
@@ -174,7 +207,7 @@ export default function NewInvoiceModal({ open, onClose, onSuccess, salesOrderId
     { subtotal: 0, tax: 0, total: 0 }
   )
 
-  async function onSubmit(values: FormValues) {
+  async function createInvoice(values: FormValues) {
     setSubmitting(true)
     try {
       await invoicesApi.create({
@@ -216,6 +249,44 @@ export default function NewInvoiceModal({ open, onClose, onSuccess, salesOrderId
     }
   }
 
+  async function onSubmit(values: FormValues) {
+    if (!selectedContact && values.customerName) {
+      setPendingValues(values)
+      setShowSaveContact(true)
+      return
+    }
+    await createInvoice(values)
+  }
+
+  async function handleSaveContactYes() {
+    if (!pendingValues) return
+    setShowSaveContact(false)
+    try {
+      await crmApi.createContact({
+        firstName:  pendingValues.customerName.split(' ')[0],
+        lastName:   pendingValues.customerName.split(' ').slice(1).join(' ') || undefined,
+        email:      pendingValues.customerEmail || undefined,
+        phone:      pendingValues.customerPhone || undefined,
+        tin:        pendingValues.customerTin || undefined,
+        address:    pendingValues.customerAddress || undefined,
+        country:    pendingValues.customerCountry || undefined,
+        postalZone: pendingValues.customerZone || undefined,
+      } as Partial<Contact>)
+      toast.success('Contact saved')
+    } catch {
+      toast.error('Could not save contact, but the invoice will still be created')
+    }
+    await createInvoice(pendingValues)
+    setPendingValues(null)
+  }
+
+  async function handleSaveContactNo() {
+    if (!pendingValues) return
+    setShowSaveContact(false)
+    await createInvoice(pendingValues)
+    setPendingValues(null)
+  }
+
   function handleClose() {
     reset()
     setSelectedContact(null)
@@ -227,6 +298,43 @@ export default function NewInvoiceModal({ open, onClose, onSuccess, salesOrderId
   }
 
   return (
+    <>
+    {/* ── Save contact confirmation ── */}
+    {showSaveContact && (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+        <div className="bg-white rounded-[14px] shadow-xl w-full max-w-sm p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+              <UserCheck size={18} className="text-green-600" />
+            </div>
+            <div>
+              <p className="text-[15px] font-bold text-gray-900">Save this contact?</p>
+              <p className="text-[12.5px] text-gray-500 mt-0.5">
+                Would you like to save <strong>{pendingValues?.customerName}</strong> to your contacts for future use?
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button
+              className="flex-1"
+              loading={submitting}
+              onClick={handleSaveContactYes}
+            >
+              Yes, save contact
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1"
+              disabled={submitting}
+              onClick={handleSaveContactNo}
+            >
+              No, just create
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
+
     <Modal
       open={open}
       onClose={handleClose}
@@ -623,5 +731,6 @@ export default function NewInvoiceModal({ open, onClose, onSuccess, salesOrderId
         </div>
       </div>
     </Modal>
+    </>
   )
 }

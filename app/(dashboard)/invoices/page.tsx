@@ -183,13 +183,17 @@ export default function InvoicesPage() {
   )
 
   const invoices  = data?.content ?? []
+  const selectableInvoices = filtered.filter((i) => i.status === 'DRAFT' || i.fiscalizationStatus === 'FAILED')
   const draftInvoices = filtered.filter((i) => i.status === 'DRAFT')
-  const allDraftsSelected = draftInvoices.length > 0 && draftInvoices.every((i) => selected.has(i.id))
+  const allDraftsSelected = selectableInvoices.length > 0 && selectableInvoices.every((i) => selected.has(i.id))
+  const selectedDraftCount = Array.from(selected).filter((id) => invoices.find((i) => i.id === id && i.status === 'DRAFT' && i.fiscalizationStatus !== 'FAILED')).length
+  const selectedFailedCount = Array.from(selected).filter((id) => invoices.find((i) => i.id === id && i.fiscalizationStatus === 'FAILED')).length
   const totalFiscalized = invoices.filter((i) => i.status === 'FISCALIZED').length
   const totalDraft      = invoices.filter((i) => i.status === 'DRAFT').length
   const totalValue      = invoices.reduce((s, i) => s + i.totalAmount, 0)
   const totalPaid       = invoices.filter((i) => i.invoicePaymentStatus === 'PAID').reduce((s, i) => s + i.totalAmount, 0)
   const totalPending    = invoices.filter((i) => i.invoicePaymentStatus === 'PENDING').reduce((s, i) => s + i.totalAmount, 0)
+  const totalTax        = invoices.reduce((s, i) => s + (i.taxAmount ?? 0), 0)
 
   function toggleSelect(id: string) {
     setSelected((prev) => {
@@ -203,7 +207,7 @@ export default function InvoicesPage() {
     if (allDraftsSelected) {
       setSelected(new Set())
     } else {
-      setSelected(new Set(draftInvoices.map((i) => i.id)))
+      setSelected(new Set(selectableInvoices.map((i) => i.id)))
     }
   }
 
@@ -270,19 +274,31 @@ export default function InvoicesPage() {
 
   return (
     <div className="space-y-5 animate-fadeIn">
-      {/* Summary stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-[14px]">
+      {/* Summary stats — row 1 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-[14px]">
         {[
-          { label: 'Total Invoices',  value: data?.totalElements ?? 0,   cls: 'text-gray-900' },
-          { label: 'Fiscalized',      value: totalFiscalized,             cls: 'text-green-700' },
-          { label: 'Drafts',          value: totalDraft,                  cls: 'text-amber-700' },
-          { label: 'Total Value',     value: formatCurrency(totalValue),  cls: 'text-gray-900' },
-          { label: 'Total Paid',      value: formatCurrency(totalPaid),   cls: 'text-green-700' },
-          { label: 'Total Pending',   value: formatCurrency(totalPending),cls: 'text-amber-700' },
+          { label: 'Total Invoices', value: data?.totalElements ?? 0,  cls: 'text-gray-900'   },
+          { label: 'Fiscalized',     value: totalFiscalized,            cls: 'text-green-700'  },
+          { label: 'Drafts',         value: totalDraft,                 cls: 'text-amber-700'  },
+          { label: 'Total Value',    value: formatCurrency(totalValue), cls: 'text-gray-900'   },
         ].map(({ label, value, cls }) => (
-          <div key={label} className="bg-white border border-gray-200 rounded-[10px] p-[18px] shadow-sm min-w-0 overflow-hidden">
-            <p className="text-[11px] font-bold uppercase tracking-[.06em] text-gray-500 truncate">{label}</p>
-            <p className={`text-[17px] font-extrabold mt-1 truncate ${cls}`} title={String(value)}>{value}</p>
+          <div key={label} className="bg-white border border-gray-200 rounded-[10px] shadow-sm p-[16px] min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[.06em] text-gray-500">{label}</p>
+            <p className={`text-[15px] font-extrabold mt-1 ${cls}`} title={String(value)}>{value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Summary stats — row 2 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-[14px]">
+        {[
+          { label: 'Total Paid',    value: formatCurrency(totalPaid),    cls: 'text-green-700'  },
+          { label: 'Total Pending', value: formatCurrency(totalPending), cls: 'text-amber-700'  },
+          { label: 'Total Tax',     value: formatCurrency(totalTax),     cls: 'text-purple-700' },
+        ].map(({ label, value, cls }) => (
+          <div key={label} className="bg-white border border-gray-200 rounded-[10px] shadow-sm p-[16px] min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[.06em] text-gray-500">{label}</p>
+            <p className={`text-[15px] font-extrabold mt-1 ${cls}`} title={String(value)}>{value}</p>
           </div>
         ))}
       </div>
@@ -304,11 +320,15 @@ export default function InvoicesPage() {
             {selected.size > 0 && (
               <Button
                 loading={bulkProcessing}
-                icon={<Zap size={14} />}
+                icon={selectedFailedCount > 0 && selectedDraftCount === 0 ? <RotateCcw size={14} /> : <Zap size={14} />}
                 onClick={bulkFiscalize}
-                className="bg-green-600 hover:bg-green-700"
+                className={selectedFailedCount > 0 && selectedDraftCount === 0 ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}
               >
-                Fiscalize {selected.size} Selected
+                {selectedDraftCount > 0 && selectedFailedCount > 0
+                  ? `Fiscalize ${selectedDraftCount} + Retry ${selectedFailedCount}`
+                  : selectedFailedCount > 0
+                  ? `Retry ${selectedFailedCount} Failed`
+                  : `Fiscalize ${selectedDraftCount} Selected`}
               </Button>
             )}
             <Button
@@ -370,12 +390,12 @@ export default function InvoicesPage() {
               filtered.map((inv) => (
                 <Tr key={inv.id} className={selected.has(inv.id) ? 'bg-green-50/50' : ''}>
                   <Td>
-                    {inv.status === 'DRAFT' ? (
+                    {(inv.status === 'DRAFT' || inv.fiscalizationStatus === 'FAILED') ? (
                       <input
                         type="checkbox"
                         checked={selected.has(inv.id)}
                         onChange={() => toggleSelect(inv.id)}
-                        className="w-[14px] h-[14px] accent-green-600 cursor-pointer"
+                        className={`w-[14px] h-[14px] cursor-pointer ${inv.fiscalizationStatus === 'FAILED' ? 'accent-red-600' : 'accent-green-600'}`}
                       />
                     ) : <span />}
                   </Td>

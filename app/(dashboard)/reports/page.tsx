@@ -397,10 +397,10 @@ export default function ReportsPage() {
                   {lowStock.map((s) => (
                     <Tr key={`${s.productId}-${s.warehouseName}`}>
                       <Td className="font-semibold">{s.productName}</Td>
-                      <Td><span className="font-mono text-[12px] text-gray-500">{s.sku ?? '—'}</span></Td>
+                      <Td><span className="font-mono text-[12px] text-gray-500">{s.productSku ?? '—'}</span></Td>
                       <Td className="text-gray-500">{s.warehouseName}</Td>
-                      <Td><span className="font-bold text-red-600">{s.quantity}</span></Td>
-                      <Td className="text-gray-400">{s.reorderLevel}</Td>
+                      <Td><span className="font-bold text-red-600">{Number(s.quantityOnHand ?? 0).toFixed(2)}</span></Td>
+                      <Td className="text-gray-400">{s.reorderPoint ?? '—'}</Td>
                     </Tr>
                   ))}
                 </Tbody>
@@ -488,8 +488,8 @@ export default function ReportsPage() {
                     ? <EmptyState message="No purchase orders yet." icon={<RefreshCw size={28} />} />
                     : [...purchaseOrders].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10).map((po) => (
                       <Tr key={po.id}>
-                        <Td><span className="font-mono text-[12px] font-semibold text-gray-700">{po.orderNumber}</span></Td>
-                        <Td className="font-semibold">{po.supplierName ?? po.vendorName}</Td>
+                        <Td><span className="font-mono text-[12px] font-semibold text-gray-700">{po.poNumber}</span></Td>
+                        <Td className="font-semibold">{po.vendorName}</Td>
                         <Td className="font-bold">{formatCurrency(po.totalAmount)}</Td>
                         <Td>
                           <Badge variant={po.status === 'RECEIVED' ? 'green' : po.status === 'SENT' ? 'blue' : po.status === 'CANCELLED' ? 'red' : 'gray'}>

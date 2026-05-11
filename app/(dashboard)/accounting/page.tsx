@@ -2,18 +2,20 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useForm } from 'react-hook-form'
+import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
-  BookOpen, CreditCard, Receipt, TrendingUp, Plus, CheckCircle2,
+  BookOpen, Receipt, TrendingUp, Plus, CheckCircle2, Trash2,
   DollarSign, ArrowUpRight, ArrowDownLeft, BarChart3, Building2,
-  FileText, Edit2,
+  FileText, Edit2, Filter, Download,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { accountingApi } from '@/lib/api/accounting'
+import { divisionsApi } from '@/lib/api/divisions'
 import { formatCurrency, formatDate, cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/api/client'
+import { useAuthStore } from '@/store/auth'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Table, Thead, Th, Tbody, Tr, Td, EmptyState, SkeletonRows } from '@/components/ui/Table'
 import Badge from '@/components/ui/Badge'
@@ -47,6 +49,29 @@ const billSchema = z.object({
   description: z.string().optional(),
 })
 type BillForm = z.infer<typeof billSchema>
+
+const journalLineSchema = z.object({
+  accountId:    z.string().min(1, 'Select an account'),
+  description:  z.string().optional(),
+  debitAmount:  z.coerce.number().min(0).default(0),
+  creditAmount: z.coerce.number().min(0).default(0),
+})
+const journalSchema = z.object({
+  description: z.string().min(1, 'Description required'),
+  entryDate:   z.string().min(1, 'Date required'),
+  reference:   z.string().optional(),
+  lines:       z.array(journalLineSchema).min(2, 'Add at least two lines'),
+})
+type JournalForm = z.infer<typeof journalSchema>
+
+const paymentSchema = z.object({
+  amount:        z.coerce.number().positive('Amount must be > 0'),
+  paymentMethod: z.enum(['BANK_TRANSFER', 'CASH', 'CARD', 'CHEQUE']),
+  paymentDate:   z.string().min(1, 'Date required'),
+  reference:     z.string().optional(),
+  notes:         z.string().optional(),
+})
+type PaymentForm = z.infer<typeof paymentSchema>
 
 type Tab = 'overview' | 'accounts' | 'journals' | 'bills' | 'banks' | 'reports'
 
@@ -82,27 +107,40 @@ function MiniBar({ value, max, color }: { value: number; max: number; color: str
 
 export default function AccountingPage() {
   const qc = useQueryClient()
+  const { isTenantAdmin, isTenantUser } = useAuthStore()
   const [tab, setTab] = useState<Tab>('overview')
-  const [showNewAccount, setShowNewAccount] = useState(false)
-  const [showNewBank,    setShowNewBank]    = useState(false)
-  const [showNewBill,    setShowNewBill]    = useState(false)
+  const [divisionFilter, setDivisionFilter] = useState('')
+  const [showNewAccount, setShowNewAccount]  = useState(false)
+  const [showNewBank,    setShowNewBank]     = useState(false)
+  const [showNewBill,    setShowNewBill]     = useState(false)
+  const [showNewJournal, setShowNewJournal]  = useState(false)
+  const [showPayBill,    setShowPayBill]     = useState(false)
+  const [payingBill,     setPayingBill]      = useState<any>(null)
   const [editBank, setEditBank] = useState<BankAccount | null>(null)
 
   /* ── Queries ── */
+  const { data: divisions } = useQuery({
+    queryKey: ['divisions'],
+    queryFn: () => divisionsApi.getDivisions().then((r) => r.data.data),
+    enabled: isTenantAdmin(),
+  })
+
+  const divParams = divisionFilter ? { divisionTenantId: divisionFilter } : {}
+
   const { data: accounts, isLoading: coaLoading } = useQuery({
-    queryKey: ['accounting-coa'],
-    queryFn: () => accountingApi.getAccounts({ page: 0, size: 100 }).then((r) => r.data.data),
+    queryKey: ['accounting-coa', divisionFilter],
+    queryFn: () => accountingApi.getAccounts({ page: 0, size: 100, ...divParams }).then((r) => r.data.data),
   })
 
   const { data: journals, isLoading: journalLoading } = useQuery({
-    queryKey: ['accounting-journals'],
-    queryFn: () => accountingApi.getJournalEntries({ page: 0, size: 30 }).then((r) => r.data.data),
+    queryKey: ['accounting-journals', divisionFilter],
+    queryFn: () => accountingApi.getJournalEntries({ page: 0, size: 30, ...divParams }).then((r) => r.data.data),
     enabled: tab === 'journals',
   })
 
   const { data: bills, isLoading: billsLoading } = useQuery({
-    queryKey: ['accounting-bills'],
-    queryFn: () => accountingApi.getBills({ page: 0, size: 30 }).then((r) => r.data.data),
+    queryKey: ['accounting-bills', divisionFilter],
+    queryFn: () => accountingApi.getBills({ page: 0, size: 30, ...divParams }).then((r) => r.data.data),
   })
 
   const { data: bankAccounts, isLoading: banksLoading } = useQuery({
@@ -129,7 +167,7 @@ export default function AccountingPage() {
   })
 
   /* ── Derived data ── */
-  const accs = accounts?.content ?? []
+  const accs = Array.isArray(accounts) ? accounts : []
   const billList = bills?.content ?? []
   const bankList: BankAccount[] = Array.isArray(bankAccounts) ? bankAccounts : (bankAccounts?.content ?? [])
 
@@ -140,7 +178,7 @@ export default function AccountingPage() {
   const netIncome     = revenueTotal - expenseTotal
   const totalBankBalance = bankList.reduce((s, b) => s + (b.balance ?? 0), 0)
 
-  const pendingBills = billList.filter((b) => b.status === 'PENDING')
+  const pendingBills = billList.filter((b) => b.status === 'DRAFT' || b.status === 'PENDING')
   const totalPendingBills = pendingBills.reduce((s, b) => s + b.totalAmount, 0)
 
   /* ── Mutations ── */
@@ -180,13 +218,118 @@ export default function AccountingPage() {
     onSuccess: () => { toast.success('Bill approved'); qc.invalidateQueries({ queryKey: ['accounting-bills'] }) },
     onError: (e) => toast.error(getErrorMessage(e)),
   })
-  const payBillMutation = useMutation({
-    mutationFn: accountingApi.payBill,
-    onSuccess: () => { toast.success('Bill marked as paid'); qc.invalidateQueries({ queryKey: ['accounting-bills'] }) },
+  const today = new Date().toISOString().slice(0, 10)
+
+  const paymentForm = useForm<PaymentForm>({
+    resolver: zodResolver(paymentSchema),
+    defaultValues: { paymentMethod: 'BANK_TRANSFER', paymentDate: today },
+  })
+
+  function openPayModal(bill: any) {
+    setPayingBill(bill)
+    paymentForm.reset({
+      amount: bill.totalAmount - (bill.paidAmount ?? 0),
+      paymentMethod: 'BANK_TRANSFER',
+      paymentDate: today,
+      reference: bill.billNumber,
+    })
+    setShowPayBill(true)
+  }
+
+  const recordBillPaymentMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: PaymentForm }) =>
+      accountingApi.recordBillPayment(id, data),
+    onSuccess: () => {
+      toast.success('Payment recorded — GL entry posted (Dr AP / Cr Cash)')
+      qc.invalidateQueries({ queryKey: ['accounting-bills'] })
+      setShowPayBill(false)
+      setPayingBill(null)
+    },
     onError: (e) => toast.error(getErrorMessage(e)),
   })
 
-  const billStatusBadge = (s: string) => s === 'PAID' ? 'green' : s === 'APPROVED' ? 'blue' : s === 'PENDING' ? 'amber' : 'gray'
+  function handleExportCsv() {
+    accountingApi.exportJournalEntriesCsv(divisionFilter || undefined).then((res) => {
+      const url = window.URL.createObjectURL(new Blob([res.data as any], { type: 'text/csv' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', 'journal-entries.csv')
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    }).catch(() => toast.error('Failed to export CSV'))
+  }
+
+  const seedMutation = useMutation({
+    mutationFn: accountingApi.seedDefaultAccounts,
+    onSuccess: () => { toast.success('Default accounts seeded'); qc.invalidateQueries({ queryKey: ['accounting-coa'] }) },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  })
+
+  const recalcMutation = useMutation({
+    mutationFn: accountingApi.recalculateBalances,
+    onSuccess: (r) => { toast.success(r.data.message ?? 'Balances recalculated'); qc.invalidateQueries({ queryKey: ['accounting-coa'] }) },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  })
+
+  const journalForm = useForm<JournalForm>({
+    resolver: zodResolver(journalSchema),
+    defaultValues: {
+      entryDate: today,
+      lines: [
+        { accountId: '', description: '', debitAmount: 0, creditAmount: 0 },
+        { accountId: '', description: '', debitAmount: 0, creditAmount: 0 },
+      ],
+    },
+  })
+  const { fields: journalLines, append: appendLine, remove: removeLine } = useFieldArray({
+    control: journalForm.control, name: 'lines',
+  })
+  const watchedLines = journalForm.watch('lines')
+  const totalDebits  = watchedLines.reduce((s, l) => s + (Number(l.debitAmount) || 0), 0)
+  const totalCredits = watchedLines.reduce((s, l) => s + (Number(l.creditAmount) || 0), 0)
+  const isBalanced   = Math.abs(totalDebits - totalCredits) < 0.01
+
+  const createJournalMutation = useMutation({
+    mutationFn: (data: JournalForm) => accountingApi.createJournalEntry({
+      description: data.description,
+      entryDate:   data.entryDate,
+      reference:   data.reference || undefined,
+      lines: data.lines.map((l) => ({
+        accountId:    l.accountId,
+        description:  l.description || undefined,
+        debitAmount:  l.debitAmount,
+        creditAmount: l.creditAmount,
+      })),
+    }),
+    onSuccess: () => {
+      toast.success('Journal entry created')
+      qc.invalidateQueries({ queryKey: ['accounting-journals'] })
+      qc.invalidateQueries({ queryKey: ['accounting-coa'] })
+      setShowNewJournal(false)
+      journalForm.reset({ entryDate: today, lines: [
+        { accountId: '', description: '', debitAmount: 0, creditAmount: 0 },
+        { accountId: '', description: '', debitAmount: 0, creditAmount: 0 },
+      ]})
+    },
+    onError: (e) => toast.error(getErrorMessage(e)),
+  })
+
+  const billStatusBadge = (s: string) =>
+    s === 'PAID' ? 'green' : s === 'PARTIALLY_PAID' ? 'amber' : s === 'PENDING' ? 'blue' : 'gray'
+
+  if (isTenantUser()) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <BookOpen size={52} className="mb-4 text-gray-200" />
+        <p className="text-[16px] font-semibold text-gray-500">Access Restricted</p>
+        <p className="text-[13px] text-gray-400 mt-1">Your role does not have permission to view accounting data.</p>
+      </div>
+    )
+  }
+
+  const divisionList = Array.isArray(divisions) ? divisions : []
 
   return (
     <div className="space-y-5 animate-fadeIn">
@@ -211,6 +354,32 @@ export default function AccountingPage() {
           </div>
         ))}
       </div>
+
+      {/* ── Division filter (TENANT_ADMIN only) ── */}
+      {isTenantAdmin() && (
+        <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-[10px] px-4 py-2.5 shadow-sm w-fit">
+          <Filter size={13} className="text-green-600 flex-shrink-0" />
+          <span className="text-[11px] font-bold uppercase tracking-wide text-gray-400">View:</span>
+          <select
+            value={divisionFilter}
+            onChange={(e) => setDivisionFilter(e.target.value)}
+            className="text-[13px] border-0 bg-transparent text-gray-700 font-semibold focus:outline-none focus:ring-0 pr-2 cursor-pointer"
+          >
+            <option value="">All Divisions (Root)</option>
+            {divisionList.map((d: any) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+          {divisionFilter && (
+            <button
+              onClick={() => setDivisionFilter('')}
+              className="text-[11px] text-gray-400 hover:text-red-400 font-medium transition-colors ml-1"
+            >
+              ✕ Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Tabs ── */}
       <div className="flex items-center gap-1 bg-gray-100 rounded-[8px] p-1 w-fit overflow-x-auto">
@@ -303,8 +472,8 @@ export default function AccountingPage() {
                     <Td><Badge variant={billStatusBadge(b.status) as any}>{b.status}</Badge></Td>
                     <Td>
                       <div className="flex gap-1">
-                        {b.status === 'PENDING' && <button onClick={() => approveBillMutation.mutate(b.id)} className="text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-full">Approve</button>}
-                        {b.status === 'APPROVED' && <button onClick={() => payBillMutation.mutate(b.id)} className="text-[11px] font-semibold text-green-600 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 size={10} />Pay</button>}
+                        {b.status === 'DRAFT' && <button onClick={() => approveBillMutation.mutate(b.id)} className="text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-full">Approve</button>}
+                        {(b.status === 'PENDING' || b.status === 'PARTIALLY_PAID') && <button onClick={() => openPayModal(b)} className="text-[11px] font-semibold text-green-600 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle2 size={10} />Pay</button>}
                       </div>
                     </Td>
                   </Tr>
@@ -319,8 +488,15 @@ export default function AccountingPage() {
       {tab === 'accounts' && (
         <Card>
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h3 className="text-[15px] font-bold text-gray-900">Chart of Accounts</h3>
-            <Button icon={<Plus size={14} />} onClick={() => setShowNewAccount(true)}>Add Account</Button>
+            <div>
+              <h3 className="text-[15px] font-bold text-gray-900">Chart of Accounts</h3>
+              <p className="text-[11.5px] text-gray-400 mt-0.5">Standard Nigeria/IFRS accounts — seed once per company</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" loading={recalcMutation.isPending} onClick={() => recalcMutation.mutate(undefined)} title="Reset all balances to zero and replay every posted journal entry. Run once if balances look wrong.">Recalculate Balances</Button>
+              <Button variant="outline" loading={seedMutation.isPending} onClick={() => seedMutation.mutate(undefined)}>Seed Defaults</Button>
+              <Button icon={<Plus size={14} />} onClick={() => setShowNewAccount(true)}>Add Account</Button>
+            </div>
           </div>
           <Table>
             <Thead><Th>Code</Th><Th>Name</Th><Th>Type</Th><Th>Description</Th><Th>Balance</Th><Th>Status</Th></Thead>
@@ -345,7 +521,16 @@ export default function AccountingPage() {
       {/* ══ JOURNALS TAB ══ */}
       {tab === 'journals' && (
         <Card>
-          <CardHeader title="Journal Entries" />
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+            <div>
+              <h3 className="text-[15px] font-bold text-gray-900">Journal Entries</h3>
+              <p className="text-[11.5px] text-gray-400 mt-0.5">Post transport, telephone, levies, and any other transactions here</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" icon={<Download size={14} />} onClick={handleExportCsv}>Export CSV</Button>
+              <Button icon={<Plus size={14} />} onClick={() => setShowNewJournal(true)}>New Entry</Button>
+            </div>
+          </div>
           <Table>
             <Thead><Th>Entry #</Th><Th>Description</Th><Th>Total Debit</Th><Th>Total Credit</Th><Th>Balanced</Th><Th>Status</Th><Th>Date</Th></Thead>
             <Tbody>
@@ -403,8 +588,8 @@ export default function AccountingPage() {
                     <Td className="text-gray-400">{formatDate(b.createdAt)}</Td>
                     <Td>
                       <div className="flex gap-1">
-                        {b.status === 'PENDING' && <button onClick={() => approveBillMutation.mutate(b.id)} className="text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-full transition-colors">Approve</button>}
-                        {b.status === 'APPROVED' && <button onClick={() => payBillMutation.mutate(b.id)} className="text-[11px] font-semibold text-green-600 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-full flex items-center gap-1 transition-colors"><CheckCircle2 size={10} />Mark Paid</button>}
+                        {b.status === 'DRAFT' && <button onClick={() => approveBillMutation.mutate(b.id)} className="text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-full transition-colors">Approve</button>}
+                        {(b.status === 'PENDING' || b.status === 'PARTIALLY_PAID') && <button onClick={() => openPayModal(b)} className="text-[11px] font-semibold text-green-600 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-full flex items-center gap-1 transition-colors"><CheckCircle2 size={10} />Pay</button>}
                       </div>
                     </Td>
                   </Tr>
@@ -610,6 +795,183 @@ export default function AccountingPage() {
             <option value="EUR">EUR — Euro</option>
           </Select>
         </div>
+      </Modal>
+
+      {/* New Journal Entry */}
+      <Modal
+        open={showNewJournal}
+        onClose={() => { setShowNewJournal(false); journalForm.reset({ entryDate: today, lines: [{ accountId: '', description: '', debitAmount: 0, creditAmount: 0 }, { accountId: '', description: '', debitAmount: 0, creditAmount: 0 }] }) }}
+        title="New Journal Entry"
+        size="xl"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setShowNewJournal(false)}>Cancel</Button>
+            <Button
+              loading={createJournalMutation.isPending}
+              disabled={!isBalanced}
+              onClick={journalForm.handleSubmit((v) => createJournalMutation.mutate(v))}
+            >
+              {isBalanced ? 'Post Entry' : `Out of balance by ${Math.abs(totalDebits - totalCredits).toFixed(2)}`}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <div className="bg-blue-50 border border-blue-100 rounded-[8px] p-3 text-[12.5px] text-blue-700">
+            Use this to record any business expense — transport, telephone bills, levies, salaries, or any other transaction not captured automatically.
+          </div>
+
+          {/* Header fields */}
+          <div className="grid grid-cols-3 gap-4">
+            <Input
+              label="Description" required
+              {...journalForm.register('description')}
+              error={journalForm.formState.errors.description?.message}
+              placeholder="e.g. Transport to client site"
+              hint="What this journal entry records"
+              className="col-span-2"
+            />
+            <Input
+              label="Entry Date" required type="date"
+              {...journalForm.register('entryDate')}
+              error={journalForm.formState.errors.entryDate?.message}
+            />
+          </div>
+          <Input
+            label="Reference / Memo"
+            {...journalForm.register('reference')}
+            placeholder="Receipt #, cheque #, or any reference"
+            hint="Optional — for audit trail"
+          />
+
+          {/* Line items */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Lines — Debit and Credit must balance</p>
+              <button
+                type="button"
+                onClick={() => appendLine({ accountId: '', description: '', debitAmount: 0, creditAmount: 0 })}
+                className="flex items-center gap-1 text-[12px] font-semibold text-green-600 hover:text-green-700"
+              >
+                <Plus size={13} /> Add line
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {/* Column headers */}
+              <div className="grid grid-cols-[2fr_2fr_1fr_1fr_24px] gap-2 px-1">
+                {['Account', 'Description', 'Debit (Dr)', 'Credit (Cr)', ''].map((h) => (
+                  <p key={h} className="text-[10.5px] font-bold uppercase tracking-wide text-gray-400">{h}</p>
+                ))}
+              </div>
+
+              {journalLines.map((field, i) => (
+                <div key={field.id} className="grid grid-cols-[2fr_2fr_1fr_1fr_24px] gap-2 items-center">
+                  <Select
+                    {...journalForm.register(`lines.${i}.accountId`)}
+                    error={journalForm.formState.errors.lines?.[i]?.accountId?.message}
+                  >
+                    <option value="">— Account —</option>
+                    {accs.map((a) => (
+                      <option key={a.id} value={a.id}>{a.code} · {a.name}</option>
+                    ))}
+                  </Select>
+                  <Input
+                    {...journalForm.register(`lines.${i}.description`)}
+                    placeholder="Line description"
+                  />
+                  <Input
+                    type="number" step="0.01" placeholder="0.00"
+                    {...journalForm.register(`lines.${i}.debitAmount`)}
+                  />
+                  <Input
+                    type="number" step="0.01" placeholder="0.00"
+                    {...journalForm.register(`lines.${i}.creditAmount`)}
+                  />
+                  {journalLines.length > 2 ? (
+                    <button type="button" onClick={() => removeLine(i)} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors">
+                      <Trash2 size={13} />
+                    </button>
+                  ) : <div />}
+                </div>
+              ))}
+            </div>
+
+            {/* Totals row */}
+            <div className={cn('mt-3 flex items-center justify-end gap-6 text-[13px] font-semibold px-4 py-2.5 rounded-[8px]', isBalanced ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700')}>
+              <span>Total Debit: <strong>{totalDebits.toFixed(2)}</strong></span>
+              <span>Total Credit: <strong>{totalCredits.toFixed(2)}</strong></span>
+              {isBalanced
+                ? <span className="flex items-center gap-1"><CheckCircle2 size={13} /> Balanced</span>
+                : <span>Difference: {Math.abs(totalDebits - totalCredits).toFixed(2)}</span>}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Record Payment Modal */}
+      <Modal
+        open={showPayBill}
+        onClose={() => { setShowPayBill(false); setPayingBill(null); paymentForm.reset() }}
+        title={payingBill ? `Record Payment — ${payingBill.billNumber}` : 'Record Payment'}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => { setShowPayBill(false); setPayingBill(null) }}>Cancel</Button>
+            <Button
+              loading={recordBillPaymentMutation.isPending}
+              onClick={paymentForm.handleSubmit((v) => {
+              const remaining = (payingBill.totalAmount ?? 0) - (payingBill.paidAmount ?? 0)
+              if (v.amount > remaining + 0.01) {
+                paymentForm.setError('amount', {
+                  message: `Cannot exceed remaining balance of ${formatCurrency(remaining)}`,
+                })
+                return
+              }
+              recordBillPaymentMutation.mutate({ id: payingBill!.id, data: v })
+            })}
+            >
+              Record Payment
+            </Button>
+          </>
+        }
+      >
+        {payingBill && (
+          <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-100 rounded-[8px] p-3 text-[12.5px] text-amber-700 space-y-1">
+              <p><span className="font-semibold">Vendor:</span> {payingBill.vendorName}</p>
+              <p><span className="font-semibold">Total:</span> {formatCurrency(payingBill.totalAmount)} &nbsp;·&nbsp; <span className="font-semibold">Paid:</span> {formatCurrency(payingBill.paidAmount ?? 0)} &nbsp;·&nbsp; <span className="font-semibold">Balance:</span> {formatCurrency(payingBill.totalAmount - (payingBill.paidAmount ?? 0))}</p>
+            </div>
+            <Input
+              label="Amount (₦)" required type="number" step="0.01"
+              {...paymentForm.register('amount')}
+              error={paymentForm.formState.errors.amount?.message}
+              hint="Leave as-is to pay the remaining balance in full"
+            />
+            <Select label="Payment Method" required {...paymentForm.register('paymentMethod')}>
+              <option value="BANK_TRANSFER">Bank Transfer</option>
+              <option value="CASH">Cash</option>
+              <option value="CARD">Card</option>
+              <option value="CHEQUE">Cheque</option>
+            </Select>
+            <Input
+              label="Payment Date" required type="date"
+              {...paymentForm.register('paymentDate')}
+              error={paymentForm.formState.errors.paymentDate?.message}
+            />
+            <Input
+              label="Reference / Transaction ID"
+              {...paymentForm.register('reference')}
+              placeholder="e.g. TRF-20240501-001"
+              hint="Bank reference, cheque number, or transaction ID"
+            />
+            <Input
+              label="Notes"
+              {...paymentForm.register('notes')}
+              placeholder="Optional payment note"
+            />
+          </div>
+        )}
       </Modal>
 
       {/* New Bill */}

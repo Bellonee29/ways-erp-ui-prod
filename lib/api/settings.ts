@@ -51,6 +51,22 @@ export interface DivisionKeyStatusResponse {
   keyStatus: CryptoKeyStatusResponse
 }
 
+export interface CompanySettingsRequest {
+  companyName?: string
+  companyAddress?: string
+  companyPhone?: string
+  companyEmail?: string
+}
+
+export interface CompanySettings {
+  id: string
+  name: string
+  companyName?: string
+  companyAddress?: string
+  companyPhone?: string
+  companyEmail?: string
+}
+
 export const settingsApi = {
   /** Get current user's own profile */
   getProfile: () =>
@@ -92,4 +108,32 @@ export const settingsApi = {
   /** Update FIRS credentials for a specific division (TENANT_ADMIN only) */
   updateFirsCredentialsForDivision: (divisionId: string, data: UpdateFirsCredentialsRequest) =>
     apiClient.put<ApiResponse<void>>(`/settings/crypto-keys/divisions/${divisionId}/firs-credentials`, data),
+
+  /** Get root (own tenant) FIRS key status (TENANT_ADMIN only) */
+  getRootKeyStatus: () =>
+    apiClient.get<ApiResponse<CryptoKeyStatusResponse>>('/settings/crypto-keys/root/status'),
+
+  /** Upload / replace root FIRS keys for the TENANT_ADMIN's own tenant */
+  uploadKeysForRoot: (data: UploadCryptoKeyRequest) =>
+    apiClient.post<ApiResponse<CryptoKeyStatusResponse>>('/settings/crypto-keys/root/keys', data),
+
+  /** Update FIRS credentials for the TENANT_ADMIN's own tenant */
+  updateFirsCredentialsForRoot: (data: UpdateFirsCredentialsRequest) =>
+    apiClient.put<ApiResponse<void>>('/settings/crypto-keys/root/firs-credentials', data),
+
+  /** Get own company receipt settings */
+  getCompanySettings: () =>
+    apiClient.get<ApiResponse<CompanySettings>>('/tenants/me/company'),
+
+  /** Update own company receipt settings */
+  updateCompanySettings: (data: CompanySettingsRequest) =>
+    apiClient.put<ApiResponse<CompanySettings>>('/tenants/me/company', data),
+
+  /** Get all division company settings (TENANT_ADMIN only) */
+  getDivisionCompanySettings: () =>
+    apiClient.get<ApiResponse<CompanySettings[]>>('/tenants/me/company/divisions'),
+
+  /** Update a specific division's company settings (TENANT_ADMIN only) */
+  updateDivisionCompanySettings: (divisionId: string, data: CompanySettingsRequest) =>
+    apiClient.put<ApiResponse<CompanySettings>>(`/tenants/me/company/divisions/${divisionId}`, data),
 }
