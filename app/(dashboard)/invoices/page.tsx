@@ -6,7 +6,7 @@ import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Search, Download, Zap, Trash2, FileText, FileMinus, FilePlus, Eye, RotateCcw, Upload } from 'lucide-react'
+import { Plus, Search, Download, Zap, Trash2, FileText, FileMinus, FilePlus, Eye, RotateCcw, Upload, CreditCard } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { invoicesApi } from '@/lib/api/invoices'
 import { useAuthStore } from '@/store/auth'
@@ -119,6 +119,9 @@ export default function InvoicesPage() {
   const [bulkProcessing, setBulkProcessing] = useState(false)
   const [fiscalError, setFiscalError] = useState<{ invoiceNumber: string; error: string } | null>(null)
   const [showUpload, setShowUpload] = useState(false)
+  const [paymentStatusInvoice, setPaymentStatusInvoice] = useState<Invoice | null>(null)
+  const [paymentStatus, setPaymentStatus] = useState('PAID')
+  const [paymentAmount, setPaymentAmount] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['invoices', { page, admin: isTenantAdmin() }],
@@ -146,6 +149,18 @@ export default function InvoicesPage() {
     onSuccess: () => {
       toast.success('Invoice deleted')
       qc.invalidateQueries({ queryKey: ['invoices'] })
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const updatePaymentStatusMutation = useMutation({
+    mutationFn: ({ id, status, amount }: { id: string; status: string; amount?: number }) =>
+      invoicesApi.updatePaymentStatus(id, status, amount),
+    onSuccess: (_, vars) => {
+      toast.success(`Payment status updated to ${vars.status}`)
+      qc.invalidateQueries({ queryKey: ['invoices'] })
+      setPaymentStatusInvoice(null)
+      setPaymentAmount('')
     },
     onError: (err) => toast.error(getErrorMessage(err)),
   })
@@ -502,6 +517,20 @@ export default function InvoicesPage() {
                           <Download size={14} />
                         </button>
                       )}
+                      {/* Update payment status (fiscalized only) */}
+                      {inv.fiscalizationStatus === 'COMPLETED' && (
+                        <button
+                          onClick={() => {
+                            setPaymentStatusInvoice(inv)
+                            setPaymentStatus(inv.invoicePaymentStatus ?? 'PAID')
+                            setPaymentAmount('')
+                          }}
+                          title="Update payment status"
+                          className="w-[30px] h-[30px] rounded-[6px] bg-purple-50 text-purple-600 flex items-center justify-center hover:bg-purple-100 transition-colors"
+                        >
+                          <CreditCard size={14} />
+                        </button>
+                      )}
                       {/* Delete draft */}
                       {inv.status === 'DRAFT' && (
                         <button
@@ -699,6 +728,75 @@ export default function InvoicesPage() {
             </div>
           </div>
         </div>
+      </Modal>
+
+      {/* ── Payment Status Modal ── */}
+      <Modal
+        open={!!paymentStatusInvoice}
+        onClose={() => { setPaymentStatusInvoice(null); setPaymentAmount('') }}
+        title={`Update Payment Status — ${paymentStatusInvoice?.invoiceNumber}`}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => { setPaymentStatusInvoice(null); setPaymentAmount('') }}>
+              Cancel
+            </Button>
+            <Button
+              loading={updatePaymentStatusMutation.isPending}
+              onClick={() => {
+                if (!paymentStatusInvoice) return
+                const amount = paymentStatus === 'PARTIAL_PAYMENT' && paymentAmount
+                  ? parseFloat(paymentAmount)
+                  : undefined
+                updatePaymentStatusMutation.mutate({ id: paymentStatusInvoice.id, status: paymentStatus, amount })
+              }}
+            >
+              Update Status
+            </Button>
+          </>
+        }
+      >
+        {paymentStatusInvoice && (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[13px] font-semibold text-gray-700">Payment Status</label>
+              <select
+                value={paymentStatus}
+                onChange={(e) => setPaymentStatus(e.target.value)}
+                className="w-full px-3 py-[10px] border border-gray-200 rounded-[8px] text-[13.5px] bg-gray-50 outline-none transition-all focus:border-green-500 focus:bg-white"
+              >
+                <option value="PAID">Paid in full</option>
+                <option value="PENDING">Pending payment</option>
+                <option value="PARTIAL_PAYMENT">Partial payment</option>
+                <option value="REJECTED">Rejected</option>
+              </select>
+            </div>
+
+            {paymentStatus === 'PARTIAL_PAYMENT' && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[13px] font-semibold text-gray-700">
+                  Amount paid so far <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  placeholder={`Max: ${formatCurrency(paymentStatusInvoice.totalAmount, paymentStatusInvoice.currency)}`}
+                  className="w-full px-3 py-[10px] border border-gray-200 rounded-[8px] text-[13.5px] bg-gray-50 outline-none transition-all focus:border-green-500 focus:bg-white"
+                />
+              </div>
+            )}
+
+            <div className="bg-gray-50 border border-gray-200 rounded-[8px] px-3 py-2.5 text-[12px] text-gray-500">
+              Invoice total: <strong className="text-gray-700">{formatCurrency(paymentStatusInvoice.totalAmount, paymentStatusInvoice.currency)}</strong>
+              {paymentStatusInvoice.invoicePaymentStatus && (
+                <span className="ml-3">Current status: <strong className="text-gray-700">{paymentStatusInvoice.invoicePaymentStatus}</strong></span>
+              )}
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

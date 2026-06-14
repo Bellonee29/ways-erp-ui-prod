@@ -17,11 +17,14 @@ interface AuthUser {
 interface AuthStore {
   user: AuthUser | null
   pendingEmail: string | null
+  pendingTotpRequired: boolean
   _hasHydrated: boolean
   setUser: (user: AuthUser) => void
   setPendingEmail: (email: string) => void
+  setPendingTotpRequired: (value: boolean) => void
   setHasHydrated: (value: boolean) => void
   logout: () => void
+  isSystemAdmin: () => boolean
   isTenantAdmin: () => boolean
   isDivisionAdmin: () => boolean
   isTenantUser: () => boolean
@@ -32,16 +35,19 @@ export const useAuthStore = create<AuthStore>()(
     (set, get) => ({
       user: null,
       pendingEmail: null,
+      pendingTotpRequired: false,
       _hasHydrated: false,
 
       setUser: (user) => {
         if (typeof window !== 'undefined') {
           localStorage.setItem('ways_erp_token', user.token)
         }
-        set({ user, pendingEmail: null })
+        set({ user, pendingEmail: null, pendingTotpRequired: false })
       },
 
       setPendingEmail: (email) => set({ pendingEmail: email }),
+
+      setPendingTotpRequired: (value) => set({ pendingTotpRequired: value }),
 
       setHasHydrated: (value) => set({ _hasHydrated: value }),
 
@@ -52,6 +58,7 @@ export const useAuthStore = create<AuthStore>()(
         set({ user: null, pendingEmail: null })
       },
 
+      isSystemAdmin: () => get().user?.role === 'SYSTEM_ADMIN',
       isTenantAdmin: () => get().user?.role === 'TENANT_ADMIN',
       isDivisionAdmin: () => get().user?.role === 'DIVISION_ADMIN',
       isTenantUser: () => get().user?.role === 'TENANT_USER',

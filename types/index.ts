@@ -18,11 +18,32 @@ export interface AuthResponse {
   lastName: string
   organizationName?: string
   requiresPasswordChange: boolean   // backend field name
+  requires2FA?: boolean
+  totpRequired?: boolean
   tenantId?: string
 }
 
+// ─── TOTP ──────────────────────────────────────────────────────────────────────
+export interface TotpSetupResponse {
+  secret: string
+  qrCodeUrl: string
+  qrCodeBase64: string | null
+}
+
+export interface TotpSetupVerifyResponse {
+  enabled: boolean
+  recoveryCodes: string[]
+  message: string
+}
+
+export interface TotpStatusResponse {
+  totpEnabled: boolean
+  totpVerified: boolean
+  recoveryCodesRemaining: number
+}
+
 // ─── User ──────────────────────────────────────────────────────────────────────
-export type UserRole = 'TENANT_ADMIN' | 'DIVISION_ADMIN' | 'TENANT_USER'
+export type UserRole = 'SYSTEM_ADMIN' | 'TENANT_ADMIN' | 'DIVISION_ADMIN' | 'TENANT_USER'
 
 export interface User {
   id: string

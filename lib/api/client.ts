@@ -35,13 +35,15 @@ export type ApiError = AxiosError<{ message?: string; error?: string }>
 /** Extract a human-readable message from an Axios error */
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
+    const status = error.response?.status
     const data = error.response?.data as Record<string, unknown> | undefined
-    return (
+    const msg =
       (data?.message as string) ||
       (data?.error as string) ||
       error.message ||
-      'Something went wrong'
-    )
+      'Request failed'
+    return status ? `[${status}] ${msg}` : msg
   }
+  if (error instanceof Error) return error.message
   return 'Something went wrong'
 }

@@ -70,4 +70,9 @@ export const invoicesApi = {
   getMyNotes: (params?: PageParams) =>
     apiClient.get<ApiResponse<Page<CreditDebitNote>>>('/credit-debit-notes', { params }),
 
+  updatePaymentStatus: (id: string, status: string, amount?: number) => {
+    const params: Record<string, string | number> = { status }
+    if (amount !== undefined) params.amount = amount
+    return apiClient.patch<ApiResponse<void>>(`/invoices/${id}/payment-status`, null, { params })
+  },
 }

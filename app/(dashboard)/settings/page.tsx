@@ -9,7 +9,9 @@ import {
   User, Building2, Upload, CheckCircle2, ImageIcon,
   Shield, Mail, Phone, MapPin, Globe, Briefcase, Camera,
   Eye, EyeOff, ChevronRight, KeyRound, AlertCircle, RefreshCw,
+  ShieldCheck, ShieldOff, Copy, QrCode, TriangleAlert,
 } from 'lucide-react'
+import { authApi } from '@/lib/api/auth'
 import toast from 'react-hot-toast'
 import {
   settingsApi,
@@ -43,15 +45,16 @@ const passwordSchema = z.object({
 })
 type PasswordForm = z.infer<typeof passwordSchema>
 
-type Tab = 'profile' | 'password' | 'logo' | 'company' | 'firs' | 'firs-admin'
+type Tab = 'profile' | 'password' | 'authenticator' | 'logo' | 'company' | 'firs' | 'firs-admin'
 
 const ALL_TABS: { key: Tab; label: string; icon: React.ElementType; description: string; roles?: string[] }[] = [
-  { key: 'profile',    label: 'My Profile',      icon: User,      description: 'Name, contact info' },
-  { key: 'password',   label: 'Security',         icon: Shield,    description: 'Password & access' },
-  { key: 'logo',       label: 'Company Logo',     icon: Building2, description: 'Branding & identity' },
-  { key: 'company',    label: 'Company Profile',  icon: Briefcase, description: 'Receipt name, address, contact' },
-  { key: 'firs',       label: 'FIRS Keys',        icon: KeyRound,  description: 'Crypto keys & credentials', roles: ['DIVISION_ADMIN'] },
-  { key: 'firs-admin', label: 'Division Keys',    icon: KeyRound,  description: 'Manage division FIRS keys', roles: ['TENANT_ADMIN'] },
+  { key: 'profile',       label: 'My Profile',      icon: User,      description: 'Name, contact info' },
+  { key: 'password',      label: 'Security',         icon: Shield,    description: 'Password & access' },
+  { key: 'authenticator', label: 'Authenticator',    icon: ShieldCheck, description: 'Google Authenticator 2FA' },
+  { key: 'logo',          label: 'Company Logo',     icon: Building2, description: 'Branding & identity' },
+  { key: 'company',       label: 'Company Profile',  icon: Briefcase, description: 'Receipt name, address, contact' },
+  { key: 'firs',          label: 'FIRS Keys',        icon: KeyRound,  description: 'Crypto keys & credentials', roles: ['DIVISION_ADMIN'] },
+  { key: 'firs-admin',    label: 'Division Keys',    icon: KeyRound,  description: 'Manage division FIRS keys', roles: ['TENANT_ADMIN'] },
 ]
 
 /* ── Password field with toggle ── */
@@ -295,6 +298,72 @@ export default function SettingsPage() {
     },
     onError: (err) => toast.error(getErrorMessage(err)),
   })
+
+  /* ── TOTP (Google Authenticator) ── */
+  type TotpStep = 'idle' | 'setup' | 'codes'
+  const [totpStep, setTotpStep] = useState<TotpStep>('idle')
+  const [totpSecret, setTotpSecret] = useState('')
+  const [totpQrBase64, setTotpQrBase64] = useState<string | null>(null)
+  const [totpVerifyCode, setTotpVerifyCode] = useState('')
+  const [disableCode, setDisableCode] = useState('')
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([])
+  const [showDisableForm, setShowDisableForm] = useState(false)
+
+  const { data: totpStatus, refetch: refetchTotpStatus } = useQuery({
+    queryKey: ['totp-status'],
+    queryFn: () => authApi.getTotpStatus().then((r) => r.data.data),
+    enabled: tab === 'authenticator',
+  })
+
+  const setupTotpMutation = useMutation({
+    mutationFn: () => authApi.setupTotp().then((r) => r.data.data),
+    onSuccess: (data) => {
+      setTotpSecret(data.secret)
+      setTotpQrBase64(data.qrCodeBase64)
+      setTotpVerifyCode('')
+      setTotpStep('setup')
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const verifyTotpMutation = useMutation({
+    mutationFn: () => authApi.verifyTotpSetup({ code: totpVerifyCode, pendingSecret: totpSecret }).then((r) => r.data.data),
+    onSuccess: (data) => {
+      setRecoveryCodes(data.recoveryCodes)
+      setTotpStep('codes')
+      refetchTotpStatus()
+      toast.success('Google Authenticator enabled!')
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const disableTotpMutation = useMutation({
+    mutationFn: () => authApi.disableTotp(disableCode).then((r) => r.data.data),
+    onSuccess: () => {
+      setShowDisableForm(false)
+      setDisableCode('')
+      setTotpStep('idle')
+      refetchTotpStatus()
+      toast.success('Google Authenticator disabled. You will now receive OTP by email.')
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  const regenCodesMutation = useMutation({
+    mutationFn: () => authApi.regenerateRecoveryCodes().then((r) => r.data.data),
+    onSuccess: (codes) => {
+      setRecoveryCodes(codes)
+      setTotpStep('codes')
+      refetchTotpStatus()
+      toast.success('New recovery codes generated')
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  })
+
+  function copyAllCodes() {
+    navigator.clipboard.writeText(recoveryCodes.join('\n'))
+    toast.success('Recovery codes copied to clipboard')
+  }
 
   function toggleDivisionSection(divisionId: string, form: 'keys' | 'creds') {
     if (expandedDivision === divisionId && expandedForm === form) {
@@ -613,6 +682,207 @@ export default function SettingsPage() {
                       {tip}
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══ AUTHENTICATOR TAB ══ */}
+          {tab === 'authenticator' && (
+            <div className="space-y-4">
+              <div className="bg-white border border-gray-200 rounded-[14px] shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                  <div>
+                    <p className="text-[14px] font-bold text-gray-800">Google Authenticator</p>
+                    <p className="text-[12px] text-gray-500 mt-0.5">
+                      Use an authenticator app instead of email OTP for stronger account security.
+                    </p>
+                  </div>
+                  <div className="w-9 h-9 rounded-[10px] bg-green-50 flex items-center justify-center">
+                    <ShieldCheck size={16} className="text-green-600" />
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-5">
+
+                  {/* ── Status banner ── */}
+                  {totpStatus?.totpEnabled ? (
+                    <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-[10px] p-4">
+                      <CheckCircle2 size={16} className="text-green-600 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-[13px] font-bold text-green-800">Authenticator app is active</p>
+                        <p className="text-[12px] text-green-700 mt-0.5">
+                          {totpStatus.recoveryCodesRemaining} recovery code{totpStatus.recoveryCodesRemaining !== 1 ? 's' : ''} remaining
+                          {totpStatus.recoveryCodesRemaining <= 2 && totpStatus.recoveryCodesRemaining > 0 && (
+                            <span className="ml-2 text-amber-600 font-semibold">— running low, regenerate soon</span>
+                          )}
+                          {totpStatus.recoveryCodesRemaining === 0 && (
+                            <span className="ml-2 text-red-600 font-semibold">— none left, regenerate now</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-[10px] p-4">
+                      <AlertCircle size={15} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                      <p className="text-[12.5px] text-amber-700">
+                        Not enabled. You are currently receiving OTP codes by email.
+                        Enable Google Authenticator for stronger 2FA security.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* ── Recovery codes display (after enable or regen) ── */}
+                  {totpStep === 'codes' && recoveryCodes.length > 0 && (
+                    <div className="border border-amber-200 rounded-[10px] bg-amber-50 p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <TriangleAlert size={15} className="text-amber-600 flex-shrink-0" />
+                        <p className="text-[12.5px] font-bold text-amber-800">
+                          Save these recovery codes — shown only once
+                        </p>
+                      </div>
+                      <p className="text-[11.5px] text-amber-700">
+                        Each code can be used once if you lose access to your phone. Store them in a safe place.
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {recoveryCodes.map((code) => (
+                          <div key={code} className="bg-white border border-amber-200 rounded-[6px] px-3 py-2 text-center font-mono text-[13px] font-bold text-gray-800 tracking-widest">
+                            {code}
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={copyAllCodes}
+                        className="flex items-center gap-1.5 text-[12px] text-amber-700 font-semibold hover:text-amber-900 transition-colors"
+                      >
+                        <Copy size={13} /> Copy all codes
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ── Setup flow (step: idle → setup → codes) ── */}
+                  {!totpStatus?.totpEnabled && totpStep === 'idle' && (
+                    <button
+                      onClick={() => setupTotpMutation.mutate()}
+                      disabled={setupTotpMutation.isPending}
+                      className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white text-[13px] font-semibold py-[10px] rounded-[8px] transition-colors disabled:opacity-60"
+                    >
+                      <QrCode size={15} />
+                      {setupTotpMutation.isPending ? 'Generating…' : 'Set up Google Authenticator'}
+                    </button>
+                  )}
+
+                  {/* ── QR code + verify form ── */}
+                  {totpStep === 'setup' && (
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 border border-gray-200 rounded-[10px] p-4 space-y-3">
+                        <p className="text-[13px] font-semibold text-gray-700">1. Scan this QR code with Google Authenticator</p>
+                        {totpQrBase64 ? (
+                          <img
+                            src={`data:image/png;base64,${totpQrBase64}`}
+                            alt="TOTP QR code"
+                            className="w-40 h-40 mx-auto border border-gray-200 rounded-[8px]"
+                          />
+                        ) : (
+                          <div className="w-40 h-40 mx-auto bg-gray-200 rounded-[8px] flex items-center justify-center">
+                            <QrCode size={32} className="text-gray-400" />
+                          </div>
+                        )}
+                        <p className="text-[11.5px] text-gray-500 text-center">
+                          Or enter this key manually:
+                        </p>
+                        <div className="bg-white border border-gray-200 rounded-[6px] px-3 py-2 font-mono text-[12px] text-gray-700 tracking-wider text-center break-all">
+                          {totpSecret}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-[13px] font-semibold text-gray-700">2. Enter the 6-digit code shown in the app</p>
+                        <input
+                          type="text"
+                          value={totpVerifyCode}
+                          onChange={(e) => setTotpVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          placeholder="000000"
+                          maxLength={6}
+                          inputMode="numeric"
+                          className="w-full px-4 py-3 text-center text-[22px] font-bold tracking-[0.4em] border-2 border-gray-200 rounded-[8px] bg-gray-50 outline-none transition-all focus:border-green-500 focus:bg-white focus:shadow-[0_0_0_3px_rgba(34,197,94,.12)]"
+                        />
+                      </div>
+
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => { setTotpStep('idle'); setTotpSecret(''); setTotpQrBase64(null) }}
+                          className="flex-1 py-[10px] border border-gray-200 text-gray-600 text-[13px] font-semibold rounded-[8px] hover:bg-gray-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => verifyTotpMutation.mutate()}
+                          disabled={totpVerifyCode.length < 6 || verifyTotpMutation.isPending}
+                          className="flex-1 py-[10px] bg-green-600 hover:bg-green-700 text-white text-[13px] font-semibold rounded-[8px] transition-colors disabled:opacity-60"
+                        >
+                          {verifyTotpMutation.isPending ? 'Verifying…' : 'Verify & Enable'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Management actions when TOTP is enabled ── */}
+                  {totpStatus?.totpEnabled && totpStep !== 'setup' && (
+                    <div className="space-y-3">
+                      {/* Regenerate recovery codes */}
+                      {totpStep !== 'codes' && (
+                        <button
+                          onClick={() => regenCodesMutation.mutate()}
+                          disabled={regenCodesMutation.isPending}
+                          className="w-full flex items-center justify-center gap-2 border border-gray-200 text-gray-700 text-[13px] font-semibold py-[10px] rounded-[8px] hover:bg-gray-50 transition-colors disabled:opacity-60"
+                        >
+                          <RefreshCw size={14} className={regenCodesMutation.isPending ? 'animate-spin' : ''} />
+                          {regenCodesMutation.isPending ? 'Generating…' : 'Regenerate recovery codes'}
+                        </button>
+                      )}
+
+                      {/* Disable TOTP */}
+                      {!showDisableForm ? (
+                        <button
+                          onClick={() => setShowDisableForm(true)}
+                          className="w-full flex items-center justify-center gap-2 border border-red-200 text-red-600 text-[13px] font-semibold py-[10px] rounded-[8px] hover:bg-red-50 transition-colors"
+                        >
+                          <ShieldOff size={14} />
+                          Disable Google Authenticator
+                        </button>
+                      ) : (
+                        <div className="border border-red-200 rounded-[10px] p-4 bg-red-50 space-y-3">
+                          <p className="text-[12.5px] font-semibold text-red-700">
+                            Enter your current authenticator code (or a recovery code) to confirm:
+                          </p>
+                          <input
+                            type="text"
+                            value={disableCode}
+                            onChange={(e) => setDisableCode(e.target.value.replace(/[^0-9A-Z\-]/g, '').slice(0, 9))}
+                            placeholder="000000 or XXXX-XXXX"
+                            className="w-full px-3 py-[9px] border border-red-200 rounded-[6px] text-[13px] bg-white outline-none focus:border-red-400"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => { setShowDisableForm(false); setDisableCode('') }}
+                              className="flex-1 py-[9px] border border-gray-200 text-gray-600 text-[13px] font-semibold rounded-[6px] hover:bg-gray-50 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => disableTotpMutation.mutate()}
+                              disabled={!disableCode || disableTotpMutation.isPending}
+                              className="flex-1 py-[9px] bg-red-600 hover:bg-red-700 text-white text-[13px] font-semibold rounded-[6px] transition-colors disabled:opacity-60"
+                            >
+                              {disableTotpMutation.isPending ? 'Disabling…' : 'Confirm disable'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                 </div>
               </div>
             </div>

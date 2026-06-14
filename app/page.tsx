@@ -158,10 +158,10 @@ export default function HomePage() {
           </nav>
           {/* CTA */}
           <div className="flex items-center gap-3">
-             {/* <Link href="/register"
-              className="text-[14px] font-semibold text-gray-600 hover:text-gray-900 px-4 py-2 transition-colors">
-              Get started free
-            </Link> */}
+            <Link href="/register"
+              className="text-[14px] font-semibold text-gray-700 border-[1.5px] border-gray-200 hover:border-green-400 hover:text-green-700 px-5 py-2.5 rounded-[8px] transition-colors">
+              Register
+            </Link>
             <Link href="/login"
               className="text-[14px] font-bold text-white bg-green-600 hover:bg-green-700 px-5 py-2.5 rounded-[8px] transition-colors shadow-sm">
               Sign in

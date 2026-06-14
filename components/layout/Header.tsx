@@ -3,6 +3,7 @@
 import { Bell, Search, Settings } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import { useAuthStore } from '@/store/auth'
+import ThemeToggle from '@/components/ui/ThemeToggle'
 
 const PAGE_TITLES: Record<string, { title: string; breadcrumb: string }> = {
   '/dashboard':  { title: 'Dashboard',   breadcrumb: 'Home / Dashboard' },
@@ -12,6 +13,7 @@ const PAGE_TITLES: Record<string, { title: string; breadcrumb: string }> = {
   '/accounting': { title: 'Accounting',  breadcrumb: 'Finance / Accounting' },
   '/users':      { title: 'Users',       breadcrumb: 'Admin / Users' },
   '/tenants':    { title: 'Tenants',     breadcrumb: 'Admin / Tenants' },
+  '/analytics':  { title: 'Analytics',  breadcrumb: 'Reports / Analytics' },
 }
 
 export default function Header() {
@@ -64,6 +66,9 @@ export default function Header() {
         <button className="w-[38px] h-[38px] rounded-[6px] bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-green-50 hover:text-green-600 transition-all">
           <Settings size={17} />
         </button>
+
+        {/* Dark / light mode toggle */}
+        <ThemeToggle />
 
         {/* Org chip */}
         {user?.organizationName && (

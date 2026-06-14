@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Eye, EyeOff, Zap, Shield, BarChart3, Globe } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { authApi } from '@/lib/api/auth'
@@ -28,7 +29,7 @@ const FEATURES = [
 
 export default function LoginPage() {
   const router = useRouter()
-  const { setPendingEmail } = useAuthStore()
+  const { setPendingEmail, setPendingTotpRequired } = useAuthStore()
   const [showPass, setShowPass] = useState(false)
 
   const {
@@ -38,9 +39,16 @@ export default function LoginPage() {
 
   async function onSubmit(values: FormValues) {
     try {
-      await authApi.login(values)
+      const res = await authApi.login(values)
+      const data = res.data.data
       setPendingEmail(values.email)
-      toast.success('OTP sent to your email')
+      if (data?.totpRequired) {
+        setPendingTotpRequired(true)
+        toast.success('Open your authenticator app')
+      } else {
+        setPendingTotpRequired(false)
+        toast.success('OTP sent to your email')
+      }
       router.push('/verify-otp')
     } catch (err) {
       toast.error(getErrorMessage(err))
@@ -126,6 +134,13 @@ export default function LoginPage() {
             <Shield size={15} className="flex-shrink-0 mt-[2px]" />
             Login is a 2-step process. An OTP will be emailed after credentials are verified.
           </div>
+
+          <p className="mt-6 text-center text-[13px] text-gray-500">
+            Don&apos;t have an account?{' '}
+            <Link href="/register" className="text-green-600 font-semibold hover:underline">
+              Create account
+            </Link>
+          </p>
         </div>
       </div>
     </div>

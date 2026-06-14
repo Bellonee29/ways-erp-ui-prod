@@ -23,6 +23,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Inventory',  icon: ShoppingCart,      href: '/inventory' },
   { label: 'Accounting', icon: BookOpen,           href: '/accounting', roles: ['TENANT_ADMIN', 'DIVISION_ADMIN'] },
   { label: 'Reports',    icon: BarChart2,           href: '/reports' },
+  { label: 'Analytics',  icon: TrendingUp,          href: '/analytics',  roles: ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'DIVISION_ADMIN'] },
+  { label: 'Tenants',   icon: Building2,           href: '/tenants',    roles: ['SYSTEM_ADMIN'] },
   { label: 'Users',      icon: Users,              href: '/users' },
   { label: 'Divisions',  icon: Building2,          href: '/divisions', roles: ['TENANT_ADMIN'] },
   { label: 'Settings',   icon: Settings,            href: '/settings' },
